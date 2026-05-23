@@ -1,0 +1,107 @@
+INFO:     Started server process [14984]
+INFO:     Waiting for application startup.
+2026-05-18 16:41:48,406 INFO ai_recruitment startup_begin service=ai-recruitment-api environment=development debug=release
+2026-05-18 16:41:48,406 INFO ai_recruitment dependency_available module=fastapi
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=sqlalchemy
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=dotenv
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=passlib
+2026-05-18 16:41:48,412 WARNING ai_recruitment dependency_missing module=argon2
+2026-05-18 16:41:48,412 WARNING ai_recruitment dependency_missing module=motor
+2026-05-18 16:41:48,412 WARNING ai_recruitment dependency_missing module=pymongo
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=numpy
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=sklearn
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=matplotlib
+2026-05-18 16:41:48,412 INFO ai_recruitment dependency_available module=reportlab
+2026-05-18 16:41:48,436 INFO ai_recruitment database_connection_ok
+2026-05-18 16:41:48,436 INFO ai_recruitment mongodb_not_configured
+2026-05-18 16:41:48,436 INFO ai_recruitment middleware_validation_ok middleware=CORSMiddleware,TrustedHostMiddleware,GZipMiddleware,SecurityHeadersMiddleware,AuthenticationContextMiddleware,RateLimitPlaceholderMiddleware,RequestLoggingMiddleware
+2026-05-18 16:41:48,436 INFO ai_recruitment middleware_stack_begin
+ERROR:    Traceback (most recent call last):
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 216, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 204, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\maria\ai-recruitment-system\main.py", line 197, in lifespan
+    log_middleware_stack(app)
+  File "C:\Users\maria\ai-recruitment-system\main.py", line 153, in log_middleware_stack
+    middleware.options,
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'Middleware' object has no attribute 'options'
+
+ERROR:    Application startup failed. Exiting.

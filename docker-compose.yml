@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./backend/uploads:/app/backend/uploads
+
+  frontend:
+    image: python:3.12-slim
+    working_dir: /app/frontend
+    command: python -m http.server 5500
+    volumes:
+      - .:/app
+    ports:
+      - "5500:5500"

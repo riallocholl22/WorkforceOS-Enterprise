@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Login - AI Recruit</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="auth-body">
+    <main class="auth-shell" aria-labelledby="authTitle">
+        <section class="auth-aside" aria-label="Platform security">
+            <div class="auth-brand">
+                <div class="auth-brand-mark" aria-hidden="true">AI</div>
+                <div>
+                    <p class="eyebrow">Enterprise hiring intelligence</p>
+                    <h1>AI Recruit</h1>
+                </div>
+            </div>
+            <div class="auth-promise">
+                <p>Secure access for recruiting teams, candidate data, analytics, and enterprise workflows.</p>
+            </div>
+            <div class="auth-signal-grid" aria-label="Security capabilities">
+                <span>JWT rotation</span>
+                <span>Session audit</span>
+                <span>Tenant-aware</span>
+                <span>Protected APIs</span>
+            </div>
+        </section>
+
+        <section class="auth-panel" aria-label="Authentication form">
+            <div class="auth-card">
+                <div class="auth-card-header">
+                    <p class="eyebrow" id="authModeLabel">Secure workspace login</p>
+                    <h2 id="authTitle">Welcome back</h2>
+                    <p class="muted" id="authSubtitle">Sign in with your work email to continue.</p>
+
+                    <div class="auth-presence" aria-label="System status">
+                        <div class="presence-pill">
+                            <span class="presence-dot pulse" aria-hidden="true"></span>
+                            <span id="presenceAi">AI security monitoring active</span>
+                        </div>
+                        <div class="presence-pill">
+                            <span id="presenceCoreDot" class="presence-dot checking" aria-hidden="true"></span>
+                            <span id="presenceCore">Core services: checking...</span>
+                        </div>
+                        <div class="presence-pill">
+                            <span id="presenceDataDot" class="presence-dot checking" aria-hidden="true"></span>
+                            <span id="presenceData">Data layer: checking...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="authForm" novalidate>
+                    <label class="field-label" for="email">Email address</label>
+                    <input id="email" name="email" type="email" autocomplete="email" placeholder="you@company.com" required>
+                    <p class="field-hint" id="emailHint"></p>
+
+                    <label class="field-label" for="password">Password</label>
+                    <div class="password-field">
+                        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+                        <button class="icon-btn" id="togglePassword" type="button" aria-label="Show password">Show</button>
+                    </div>
+                    <p class="field-hint" id="passwordHint"></p>
+
+                    <div id="registerFields" class="auth-extra hidden">
+                        <label class="field-label" for="organizationName">Organization name</label>
+                        <input id="organizationName" name="organizationName" autocomplete="organization" placeholder="Acme Talent">
+                    </div>
+
+                    <div id="resetFields" class="auth-extra hidden">
+                        <label class="field-label" for="resetToken">Reset or verification token</label>
+                        <input id="resetToken" name="resetToken" autocomplete="one-time-code" placeholder="Paste secure token">
+
+                        <label class="field-label" for="newPassword">New password</label>
+                        <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="Minimum 8 characters">
+                    </div>
+
+                    <div class="auth-row">
+                        <label class="check-row">
+                            <input id="rememberMe" type="checkbox" checked>
+                            <span>Remember me</span>
+                        </label>
+                        <button class="link-btn" id="forgotModeBtn" type="button">Forgot password?</button>
+                    </div>
+
+                    <button id="primaryAction" class="auth-submit" type="submit">
+                        <span class="button-label">Secure Login</span>
+                        <span class="button-loader" aria-hidden="true"></span>
+                    </button>
+                </form>
+
+                <div class="auth-actions">
+                    <button class="secondary-btn oauth-btn" id="microsoftBtn" type="button"><span>MS</span> Continue with Microsoft</button>
+                    <button class="secondary-btn oauth-btn" id="googleBtn" type="button"><span>G</span> Continue with Google</button>
+                    <button class="secondary-btn oauth-btn" id="githubBtn" type="button"><span>GH</span> Continue with GitHub</button>
+                    <button class="link-btn" id="secondaryModeBtn" type="button">Don't have an account? Register</button>
+                </div>
+
+                <div class="auth-token-actions hidden" id="tokenActions">
+                    <button class="secondary-btn" id="sendVerificationBtn" type="button">Send Verification</button>
+                    <button class="secondary-btn" id="verifyEmailBtn" type="button">Verify Email</button>
+                    <button class="secondary-btn" id="resetPasswordBtn" type="button">Reset Password</button>
+                </div>
+
+                <div id="loginStatus" class="auth-notice" role="status" aria-live="polite"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script>
+    const state = { mode: "login", loading: false };
+    const form = document.getElementById("authForm");
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const newPasswordInput = document.getElementById("newPassword");
+    const organizationInput = document.getElementById("organizationName");
+    const resetTokenInput = document.getElementById("resetToken");
+    const rememberInput = document.getElementById("rememberMe");
+    const statusEl = document.getElementById("loginStatus");
+    const primaryAction = document.getElementById("primaryAction");
+    const presenceCoreDot = document.getElementById("presenceCoreDot");
+    const presenceCoreText = document.getElementById("presenceCore");
+    const presenceDataDot = document.getElementById("presenceDataDot");
+    const presenceDataText = document.getElementById("presenceData");
+    const presenceAiText = document.getElementById("presenceAi");
+    const buttonLabel = primaryAction?.querySelector(".button-label");
+
+    function setStatus(message, type = "neutral") {
+        statusEl.textContent = message || "";
+        statusEl.className = `auth-notice ${message ? "visible" : ""} ${type}`;
+    }
+
+    function setLoading(isLoading, labelOverride = "") {
+        state.loading = isLoading;
+        primaryAction.disabled = isLoading;
+        primaryAction.classList.toggle("loading", isLoading);
+        if (buttonLabel) {
+            buttonLabel.textContent = isLoading
+                ? (labelOverride || (state.mode === "register" ? "Creating workspace..." : state.mode === "reset" ? "Securing recovery..." : "Verifying..."))
+                : (state.mode === "register" ? "Create Workspace" : state.mode === "reset" ? "Send Recovery Email" : "Secure Login");
+        }
+        document.querySelectorAll(".auth-card button, .auth-card input").forEach((node) => {
+            if (node !== primaryAction) node.disabled = isLoading;
+        });
+    }
+
+    function getEmail() {
+        return emailInput.value.trim().toLowerCase();
+    }
+
+    function validateEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function validatePassword(password, strict = false) {
+        if (!password) return "Password is required";
+        if (strict && password.length < 8) return "Password must be at least 8 characters";
+        if (strict && (!/[a-z]/i.test(password) || !/\d/.test(password))) return "Password must include letters and numbers";
+        return "";
+    }
+
+    function setFieldError(input, hint, message = "") {
+        input.classList.toggle("field-invalid", Boolean(message));
+        hint.textContent = message;
+        hint.classList.toggle("visible", Boolean(message));
+    }
+
+    function runInlineValidation() {
+        const email = getEmail();
+        const password = passwordInput.value;
+        setFieldError(emailInput, document.getElementById("emailHint"), email && !validateEmail(email) ? "Use a valid work email, for example you@company.com." : "");
+        setFieldError(passwordInput, document.getElementById("passwordHint"), password ? validatePassword(password, state.mode === "register") : "");
+    }
+
+    function _setPresence(dot, textEl, stateName, message) {
+        if (dot) {
+            dot.classList.remove("ok", "warn", "bad", "checking");
+            dot.classList.add(stateName || "checking");
+        }
+        if (textEl) textEl.textContent = message || "";
+    }
+
+    async function checkPublicHealth() {
+        _setPresence(presenceCoreDot, presenceCoreText, "checking", "Core services: checking...");
+        _setPresence(presenceDataDot, presenceDataText, "checking", "Data layer: checking...");
+        if (presenceAiText) presenceAiText.textContent = "AI security monitoring active";
+
+        try {
+            const res = await fetch(`${window.API_BASE}/health`, { method: "GET", credentials: "include" });
+            const body = await res.json().catch(() => null);
+            if (!res.ok || !body || typeof body !== "object") {
+                _setPresence(presenceCoreDot, presenceCoreText, "warn", "Core services: limited");
+                _setPresence(presenceDataDot, presenceDataText, "warn", "Data layer: checking again");
+                return;
+            }
+
+            const healthy = String(body.status || "").toLowerCase().includes("healthy");
+            const db = String(body.checks?.database || "").toLowerCase();
+
+            _setPresence(presenceCoreDot, presenceCoreText, healthy ? "ok" : "warn", healthy ? "Core services: online" : "Core services: limited");
+            _setPresence(presenceDataDot, presenceDataText, db === "ok" ? "ok" : (db ? "warn" : "checking"), db === "ok" ? "Data layer: healthy" : "Data layer: checking");
+        } catch {
+            _setPresence(presenceCoreDot, presenceCoreText, "bad", "Core services: offline");
+            _setPresence(presenceDataDot, presenceDataText, "warn", "Data layer: unavailable");
+        }
+    }
+
+    function friendlyAuthError(err) {
+        const raw = String(err?.message || err || "").trim();
+        const lower = raw.toLowerCase();
+        if (!raw) return "We couldn’t complete that sign-in. Please try again.";
+        if (lower.includes("unable to reach api") || lower.includes("start the fastapi server")) {
+            return "We couldn’t reach the secure workspace service. Check your connection, then try again.";
+        }
+        if (lower.includes("invalid credentials") || lower.includes("incorrect") || (lower.includes("email") && lower.includes("password"))) {
+            return "We couldn’t verify those credentials. Please review your email and password.";
+        }
+        if (lower.includes("email not verified") || lower.includes("verify your email")) {
+            return "Your email isn’t verified yet. Tap “Send Verification”, then paste the token to complete access.";
+        }
+        if (lower.includes("rate limit") || lower.includes("too many")) {
+            return "We paused sign-in briefly for security. Wait a moment, then try again.";
+        }
+        if (lower.includes("timeout")) {
+            return "That took longer than expected. Please try again.";
+        }
+        return raw;
+    }
+
+    function setMode(mode) {
+        state.mode = mode;
+        const isRegister = mode === "register";
+        const isReset = mode === "reset";
+        document.getElementById("registerFields").classList.toggle("hidden", !isRegister);
+        document.getElementById("resetFields").classList.toggle("hidden", !isReset);
+        document.getElementById("tokenActions").classList.toggle("hidden", !isReset);
+        document.getElementById("authTitle").textContent = isRegister ? "Create your workspace" : isReset ? "Recover access" : "Welcome back";
+        document.getElementById("authSubtitle").textContent = isRegister ? "Set up a secure workspace for your recruiting team." : isReset ? "Recover access calmly. We’ll guide you through it." : "Sign in with your work email to continue.";
+        document.getElementById("authModeLabel").textContent = isRegister ? "Enterprise registration" : isReset ? "Account recovery" : "Secure workspace login";
+        document.querySelector(".button-label").textContent = isRegister ? "Create Workspace" : isReset ? "Send Recovery Email" : "Secure Login";
+        document.getElementById("secondaryModeBtn").textContent = isRegister ? "Already have an account? Sign in" : "Don't have an account? Register";
+        passwordInput.autocomplete = isRegister ? "new-password" : "current-password";
+        setStatus("");
+    }
+
+    async function submitAuth() {
+        const email = getEmail();
+        const password = passwordInput.value;
+        if (!validateEmail(email)) {
+            setStatus("Please enter a valid work email address.", "error");
+            setFieldError(emailInput, document.getElementById("emailHint"), "Use a valid work email, for example you@company.com.");
+            emailInput.focus();
+            return;
+        }
+
+        const passwordError = validatePassword(password, state.mode === "register");
+        if (state.mode !== "reset" && passwordError) {
+            setStatus(passwordError, "error");
+            setFieldError(passwordInput, document.getElementById("passwordHint"), passwordError);
+            passwordInput.focus();
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (state.mode === "register") {
+                setLoading(true, "Creating workspace...");
+                const data = await apiRegister(email, password, organizationInput.value.trim());
+                setStatus(data.verification_token ? "Account created. Verification token issued." : "Account created. You can log in now.", "success");
+                setMode("login");
+                return;
+            }
+
+            if (state.mode === "reset") {
+                setLoading(true, "Preparing recovery...");
+                const data = await apiForgotPassword(email);
+                setStatus(data.message || "If the account exists, a reset token has been issued.", "success");
+                return;
+            }
+
+            setLoading(true, "Verifying...");
+            const data = await apiLogin(email, password);
+            storeAuthTokens(data, rememberInput.checked);
+            setStatus("Login successful. Redirecting...", "success");
+            setTimeout(() => { window.location.href = "index.html"; }, 500);
+        } catch (err) {
+            setStatus(friendlyAuthError(err), "error");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        submitAuth();
+    });
+
+    document.getElementById("togglePassword").addEventListener("click", () => {
+        const visible = passwordInput.type === "text";
+        passwordInput.type = visible ? "password" : "text";
+        document.getElementById("togglePassword").textContent = visible ? "Show" : "Hide";
+        document.getElementById("togglePassword").setAttribute("aria-label", visible ? "Show password" : "Hide password");
+    });
+
+    document.getElementById("secondaryModeBtn").addEventListener("click", () => {
+        setMode(state.mode === "register" ? "login" : "register");
+    });
+
+    document.getElementById("forgotModeBtn").addEventListener("click", () => setMode("reset"));
+    emailInput.addEventListener("input", runInlineValidation);
+    passwordInput.addEventListener("input", runInlineValidation);
+
+    document.getElementById("sendVerificationBtn").addEventListener("click", async () => {
+        try {
+            const data = await apiSendVerification(getEmail());
+            setStatus(data.message || "Verification request sent.", "success");
+        } catch (err) {
+            setStatus(friendlyAuthError(err) || "Unable to send verification.", "error");
+        }
+    });
+
+    document.getElementById("verifyEmailBtn").addEventListener("click", async () => {
+        try {
+            const data = await apiVerifyEmail(resetTokenInput.value.trim());
+            setStatus(data.message || "Email verified.", "success");
+        } catch (err) {
+            setStatus(friendlyAuthError(err) || "Verification failed.", "error");
+        }
+    });
+
+    document.getElementById("resetPasswordBtn").addEventListener("click", async () => {
+        const passwordError = validatePassword(newPasswordInput.value, true);
+        if (passwordError) {
+            setStatus(passwordError, "error");
+            return;
+        }
+        try {
+            const data = await apiResetPassword(resetTokenInput.value.trim(), newPasswordInput.value);
+            setStatus(data.message || "Password reset successful.", "success");
+            setMode("login");
+        } catch (err) {
+            setStatus(friendlyAuthError(err) || "Password reset failed.", "error");
+        }
+    });
+
+    document.getElementById("microsoftBtn").addEventListener("click", async () => {
+        await oauthLogin("Microsoft", apiMicrosoftUrl, apiMicrosoftCallback);
+    });
+
+    document.getElementById("googleBtn").addEventListener("click", async () => {
+        await oauthLogin("Google", apiGoogleUrl, apiGoogleCallback);
+    });
+
+    document.getElementById("githubBtn").addEventListener("click", async () => {
+        await oauthLogin("GitHub", apiGithubUrl, apiGithubCallback);
+    });
+
+    async function oauthLogin(provider, urlLoader, callback) {
+        try {
+            setLoading(true, `Preparing ${provider} sign-in...`);
+            const config = await urlLoader();
+            if (config.configured && config.authorization_url) {
+                window.location.href = config.authorization_url;
+                return;
+            }
+            if (!validateEmail(getEmail())) {
+                setStatus(`Enter an email to use the local ${provider} callback flow.`, "error");
+                return;
+            }
+            const data = await callback(getEmail(), getEmail().split("@")[0]);
+            storeAuthTokens(data, rememberInput.checked);
+            setStatus(`${provider} sign-in successful. Redirecting...`, "success");
+            setTimeout(() => { window.location.href = "index.html"; }, 500);
+        } catch (err) {
+            setStatus(friendlyAuthError(err) || `${provider} sign-in failed.`, "error");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        checkPublicHealth();
+        setInterval(checkPublicHealth, 15000);
+        const message = sessionStorage.getItem("authMessage");
+        if (message) {
+            setStatus(message, "error");
+            sessionStorage.removeItem("authMessage");
+        }
+        setMode("login");
+    });
+    </script>
+</body>
+</html>

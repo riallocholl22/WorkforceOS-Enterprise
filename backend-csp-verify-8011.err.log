@@ -1,0 +1,124 @@
+INFO:     Started server process [25620]
+INFO:     Waiting for application startup.
+2026-05-18 16:43:59,530 INFO ai_recruitment startup_begin service=ai-recruitment-api environment=development debug=release
+2026-05-18 16:43:59,532 INFO ai_recruitment dependency_available module=fastapi
+2026-05-18 16:43:59,532 INFO ai_recruitment dependency_available module=sqlalchemy
+2026-05-18 16:43:59,534 INFO ai_recruitment dependency_available module=dotenv
+2026-05-18 16:43:59,536 INFO ai_recruitment dependency_available module=passlib
+2026-05-18 16:43:59,536 WARNING ai_recruitment dependency_missing module=argon2
+2026-05-18 16:43:59,538 WARNING ai_recruitment dependency_missing module=motor
+2026-05-18 16:43:59,540 WARNING ai_recruitment dependency_missing module=pymongo
+2026-05-18 16:43:59,540 INFO ai_recruitment dependency_available module=numpy
+2026-05-18 16:43:59,542 INFO ai_recruitment dependency_available module=sklearn
+2026-05-18 16:43:59,542 INFO ai_recruitment dependency_available module=matplotlib
+2026-05-18 16:43:59,542 INFO ai_recruitment dependency_available module=reportlab
+2026-05-18 16:43:59,562 INFO ai_recruitment database_connection_ok
+2026-05-18 16:43:59,562 INFO ai_recruitment mongodb_not_configured
+2026-05-18 16:43:59,564 INFO ai_recruitment middleware_validation_ok middleware=CORSMiddleware,TrustedHostMiddleware,GZipMiddleware,SecurityHeadersMiddleware,AuthenticationContextMiddleware,RateLimitPlaceholderMiddleware,RequestLoggingMiddleware
+2026-05-18 16:43:59,564 INFO ai_recruitment middleware_stack_begin
+2026-05-18 16:43:59,564 INFO ai_recruitment middleware order=1 class=CORSMiddleware options={'args': (), 'kwargs': {'allow_origins': ['http://127.0.0.1:5500', 'http://localhost:5500', 'http://127.0.0.1:3000', 'http://localhost:3000'], 'allow_credentials': True, 'allow_methods': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], 'allow_headers': ['Authorization', 'Content-Type', 'Accept', 'Origin', 'X-Requested-With', 'X-CSRF-Token', 'X-Request-ID'], 'expose_headers': ['X-Request-ID', 'X-Request-Duration-ms', 'X-RateLimit-Policy']}, 'options': {}}
+2026-05-18 16:43:59,566 INFO ai_recruitment middleware order=2 class=TrustedHostMiddleware options={'args': (), 'kwargs': {'allowed_hosts': ['127.0.0.1', 'localhost', '0.0.0.0', 'testserver']}, 'options': {}}
+2026-05-18 16:43:59,566 INFO ai_recruitment middleware order=3 class=GZipMiddleware options={'args': (), 'kwargs': {'minimum_size': 1000}, 'options': {}}
+2026-05-18 16:43:59,566 INFO ai_recruitment middleware order=4 class=SecurityHeadersMiddleware options={'args': (), 'kwargs': {}, 'options': {}}
+2026-05-18 16:43:59,568 INFO ai_recruitment middleware order=5 class=AuthenticationContextMiddleware options={'args': (), 'kwargs': {}, 'options': {}}
+2026-05-18 16:43:59,568 INFO ai_recruitment middleware order=6 class=RateLimitPlaceholderMiddleware options={'args': (), 'kwargs': {}, 'options': {}}
+2026-05-18 16:43:59,570 INFO ai_recruitment middleware order=7 class=RequestLoggingMiddleware options={'args': (), 'kwargs': {}, 'options': {}}
+2026-05-18 16:43:59,570 INFO ai_recruitment middleware_stack_end
+2026-05-18 16:43:59,570 INFO ai_recruitment registered_routes_begin
+2026-05-18 16:43:59,572 INFO ai_recruitment route path=/openapi.json methods=GET,HEAD name=openapi
+2026-05-18 16:43:59,572 INFO ai_recruitment route path=/docs methods=GET,HEAD name=swagger_ui_html
+2026-05-18 16:43:59,572 INFO ai_recruitment route path=/docs/oauth2-redirect methods=GET,HEAD name=swagger_ui_redirect
+2026-05-18 16:43:59,574 INFO ai_recruitment route path=/redoc methods=GET,HEAD name=redoc_html
+2026-05-18 16:43:59,574 INFO ai_recruitment route path=/auth/register methods=POST name=register
+2026-05-18 16:43:59,574 INFO ai_recruitment route path=/auth/login methods=POST name=login
+2026-05-18 16:43:59,574 INFO ai_recruitment route path=/auth/refresh methods=POST name=refresh_tokens
+2026-05-18 16:43:59,576 INFO ai_recruitment route path=/auth/logout methods=POST name=logout
+2026-05-18 16:43:59,576 INFO ai_recruitment route path=/auth/forgot-password methods=POST name=forgot_password
+2026-05-18 16:43:59,578 INFO ai_recruitment route path=/auth/reset-password methods=POST name=reset_password_route
+2026-05-18 16:43:59,578 INFO ai_recruitment route path=/auth/send-verification methods=POST name=send_verification
+2026-05-18 16:43:59,578 INFO ai_recruitment route path=/auth/verify-email methods=POST name=verify_email
+2026-05-18 16:43:59,578 INFO ai_recruitment route path=/auth/microsoft/url methods=GET name=microsoft_url
+2026-05-18 16:43:59,580 INFO ai_recruitment route path=/auth/microsoft/callback methods=POST name=microsoft_callback
+2026-05-18 16:43:59,580 INFO ai_recruitment route path=/auth/switch-workspace methods=POST name=switch_workspace
+2026-05-18 16:43:59,582 INFO ai_recruitment route path=/auth/me methods=GET name=me
+2026-05-18 16:43:59,582 INFO ai_recruitment route path=/resume/upload methods=POST name=upload_resume
+2026-05-18 16:43:59,584 INFO ai_recruitment route path=/parse-resume methods=POST name=parse_resume
+2026-05-18 16:43:59,584 INFO ai_recruitment route path=/upload-resume methods=POST name=upload_resume_compat
+2026-05-18 16:43:59,584 INFO ai_recruitment route path=/match methods=POST name=match_candidates
+2026-05-18 16:43:59,586 INFO ai_recruitment route path=/chat/candidate methods=POST name=chat_candidate
+2026-05-18 16:43:59,586 INFO ai_recruitment route path=/ai/summary methods=POST name=ai_summary
+2026-05-18 16:43:59,586 INFO ai_recruitment route path=/ai/chat methods=POST name=chat_assistant
+2026-05-18 16:43:59,588 INFO ai_recruitment route path=/ai/candidate-chat methods=POST name=chat_candidate
+2026-05-18 16:43:59,588 INFO ai_recruitment route path=/ai/compare methods=POST name=compare_candidates
+2026-05-18 16:43:59,588 INFO ai_recruitment route path=/ai/feedback methods=POST name=ai_feedback
+2026-05-18 16:43:59,590 INFO ai_recruitment route path=/ai/shortlist methods=POST name=auto_shortlist
+2026-05-18 16:43:59,590 INFO ai_recruitment route path=/ai/decision methods=POST name=recruiter_decision
+2026-05-18 16:43:59,592 INFO ai_recruitment route path=/ai/interview/live methods=POST name=interview_live
+2026-05-18 16:43:59,592 INFO ai_recruitment route path=/ai/interview/evaluate methods=POST name=interview_evaluate
+2026-05-18 16:43:59,594 INFO ai_recruitment route path=/jobs/create methods=POST name=create_job
+2026-05-18 16:43:59,594 INFO ai_recruitment route path=/create-job methods=POST name=create_job
+2026-05-18 16:43:59,594 INFO ai_recruitment route path=/jobs methods=GET name=get_jobs
+2026-05-18 16:43:59,594 INFO ai_recruitment route path=/reports/generate methods=POST name=generate_report
+2026-05-18 16:43:59,596 INFO ai_recruitment route path=/rank-candidates methods=GET name=rank_candidates
+2026-05-18 16:43:59,596 INFO ai_recruitment route path=/ai-summary methods=POST name=legacy_ai_summary
+2026-05-18 16:43:59,596 INFO ai_recruitment route path=/chat methods=POST name=legacy_chat
+2026-05-18 16:43:59,596 INFO ai_recruitment route path=/chat-candidate methods=POST name=legacy_chat_candidate
+2026-05-18 16:43:59,598 INFO ai_recruitment route path=/ai-feedback methods=POST name=legacy_ai_feedback
+2026-05-18 16:43:59,598 INFO ai_recruitment route path=/compare-candidates methods=POST name=legacy_compare_candidates
+2026-05-18 16:43:59,598 INFO ai_recruitment route path=/auto-shortlist methods=POST name=legacy_auto_shortlist
+2026-05-18 16:43:59,600 INFO ai_recruitment route path=/face-verify methods=POST name=legacy_face_verify
+2026-05-18 16:43:59,600 INFO ai_recruitment route path=/dashboard/summary methods=GET name=dashboard_summary
+2026-05-18 16:43:59,600 INFO ai_recruitment route path=/candidates methods=GET name=get_candidates
+2026-05-18 16:43:59,602 INFO ai_recruitment route path=/interview/start methods=POST name=start_interview
+2026-05-18 16:43:59,602 INFO ai_recruitment route path=/interview/answer methods=POST name=answer_interview
+2026-05-18 16:43:59,602 INFO ai_recruitment route path=/interview/result methods=GET name=interview_result
+2026-05-18 16:43:59,602 INFO ai_recruitment route path=/interview/generate-questions methods=POST name=generate_questions
+2026-05-18 16:43:59,604 INFO ai_recruitment route path=/interview/generate methods=POST name=generate_questions
+2026-05-18 16:43:59,604 INFO ai_recruitment route path=/interview/realtime-score methods=POST name=realtime_score
+2026-05-18 16:43:59,604 INFO ai_recruitment route path=/interview/score methods=POST name=final_score
+2026-05-18 16:43:59,606 INFO ai_recruitment route path=/interview/health methods=GET name=interview_health
+2026-05-18 16:43:59,606 INFO ai_recruitment route path=/interview/status/{session_id} methods=GET name=interview_status
+2026-05-18 16:43:59,606 INFO ai_recruitment route path=/interview/proctor methods=POST name=interview_proctor
+2026-05-18 16:43:59,608 INFO ai_recruitment route path=/face/verify methods=POST name=verify_face
+2026-05-18 16:43:59,608 INFO ai_recruitment route path=/voice/enroll methods=POST name=enroll
+2026-05-18 16:43:59,608 INFO ai_recruitment route path=/voice/verify methods=POST name=verify
+2026-05-18 16:43:59,608 INFO ai_recruitment route path=/enterprise/workspace methods=GET name=workspace
+2026-05-18 16:43:59,610 INFO ai_recruitment route path=/enterprise/team methods=GET name=team
+2026-05-18 16:43:59,610 INFO ai_recruitment route path=/enterprise/team/invite methods=POST name=team_invite
+2026-05-18 16:43:59,612 INFO ai_recruitment route path=/enterprise/team/accept methods=POST name=team_accept
+2026-05-18 16:43:59,614 INFO ai_recruitment route path=/enterprise/notifications methods=GET name=notifications
+2026-05-18 16:43:59,616 INFO ai_recruitment route path=/enterprise/billing methods=GET name=billing
+2026-05-18 16:43:59,618 INFO ai_recruitment route path=/enterprise/billing/plan methods=POST name=billing_plan
+2026-05-18 16:43:59,618 INFO ai_recruitment route path=/enterprise/billing/invoice methods=POST name=billing_invoice
+2026-05-18 16:43:59,620 INFO ai_recruitment route path=/enterprise/analytics/overview methods=GET name=analytics_overview
+2026-05-18 16:43:59,620 INFO ai_recruitment route path=/enterprise/security/overview methods=GET name=security_dashboard
+2026-05-18 16:43:59,620 INFO ai_recruitment route path=/enterprise/security/analyze methods=POST name=security_analyze
+2026-05-18 16:43:59,622 INFO ai_recruitment route path=/enterprise/scheduling methods=GET name=scheduling_list
+2026-05-18 16:43:59,622 INFO ai_recruitment route path=/enterprise/scheduling methods=POST name=scheduling_create
+2026-05-18 16:43:59,622 INFO ai_recruitment route path=/enterprise/decision/intelligence methods=POST name=decision_intelligence
+2026-05-18 16:43:59,624 INFO ai_recruitment route path=/enterprise/workflows/evaluate methods=POST name=workflow_evaluate
+2026-05-18 16:43:59,624 INFO ai_recruitment route path=/enterprise/candidates/{candidate_id}/intelligence methods=GET name=candidate_intelligence
+2026-05-18 16:43:59,624 INFO ai_recruitment route path=/enterprise/skills/demand methods=GET name=skills_demand
+2026-05-18 16:43:59,624 INFO ai_recruitment route path=/enterprise/assessments methods=POST name=assessment_create
+2026-05-18 16:43:59,626 INFO ai_recruitment route path=/enterprise/assessments/{assessment_id}/submit methods=POST name=assessment_submit_route
+2026-05-18 16:43:59,626 INFO ai_recruitment route path=/enterprise/compliance/bias methods=POST name=compliance_bias
+2026-05-18 16:43:59,628 INFO ai_recruitment route path=/enterprise/compliance/bias-check methods=POST name=compliance_bias_check
+2026-05-18 16:43:59,628 INFO ai_recruitment route path=/enterprise/compliance/consent methods=POST name=compliance_consent
+2026-05-18 16:43:59,628 INFO ai_recruitment route path=/enterprise/audit-logs methods=GET name=audit_logs
+2026-05-18 16:43:59,630 INFO ai_recruitment route path=/ methods=GET name=root
+2026-05-18 16:43:59,630 INFO ai_recruitment route path=/health methods=GET name=health
+2026-05-18 16:43:59,631 INFO ai_recruitment route path=/api/v1/health methods=GET name=versioned_health
+2026-05-18 16:43:59,631 INFO ai_recruitment registered_routes_end
+2026-05-18 16:43:59,631 INFO ai_recruitment startup_complete
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8011 (Press CTRL+C to quit)
+2026-05-18 16:44:01,143 INFO ai_recruitment request_completed request_id=d5ced2c5f03ce985 method=GET path=/health status=200 duration_ms=2.77
+2026-05-18 16:44:37,343 INFO ai_recruitment request_completed request_id=8eea0cddbf6719ac method=GET path=/redoc status=200 duration_ms=0.28
+2026-05-18 16:44:37,345 INFO ai_recruitment.security csp_applied mode=docs environment=development path=/redoc policy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+2026-05-18 16:44:38,629 INFO ai_recruitment request_completed request_id=346b05ce03e4aab7 method=GET path=/docs status=200 duration_ms=0.30
+2026-05-18 16:44:38,629 INFO ai_recruitment.security csp_applied mode=docs environment=development path=/docs policy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+2026-05-18 16:44:40,656 INFO ai_recruitment request_completed request_id=50bcee187183f158 method=GET path=/openapi.json status=200 duration_ms=235.58
+2026-05-18 16:44:40,658 INFO ai_recruitment.security csp_applied mode=docs environment=development path=/openapi.json policy=default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+2026-05-18 16:45:00,866 INFO ai_recruitment request_completed request_id=b64e436841195cf6 method=GET path=/health status=200 duration_ms=0.58
+2026-05-18 16:45:53,121 INFO ai_recruitment request_completed request_id=0502c507e7cab328 method=GET path=/ status=200 duration_ms=1.29
+2026-05-18 16:45:55,223 INFO ai_recruitment request_completed request_id=9b385b2900d68328 method=GET path=/favicon.ico status=404 duration_ms=0.53

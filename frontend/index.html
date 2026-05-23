@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="WorkforceOS enterprise infrastructure for autonomous workforce intelligence and AI-assisted hiring operations.">
+    <title>WorkforceOS Command Center</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/enterprise-refinement.css">
+</head>
+<body>
+    <div id="globalLoader" class="global-loader">
+        <div class="loader-card">Processing...</div>
+    </div>
+
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">WF</div>
+                <div>
+                    <h1>WorkforceOS</h1>
+                    <p>Autonomous workforce intelligence</p>
+                </div>
+            </div>
+
+            <nav class="nav-list">
+                <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">Command Center</button>
+                <button class="nav-item" data-view="candidates" onclick="switchView('candidates')">Candidates</button>
+                <button class="nav-item" data-view="jobs" onclick="switchView('jobs')">Jobs</button>
+                <button class="nav-item" data-view="upload" onclick="switchView('upload')">Upload Resume</button>
+                <button class="nav-item" data-view="matches" onclick="switchView('matches')">Match Results</button>
+                <button class="nav-item" data-view="brain" onclick="switchView('brain')">AI Decision Brain</button>
+                <button class="nav-item" data-view="shortlist" onclick="switchView('shortlist')">Shortlist</button>
+                <button class="nav-item" data-view="interview" onclick="switchView('interview')">AI Interview</button>
+                <button class="nav-item" data-view="enterprise" onclick="switchView('enterprise')">Operations Fabric</button>
+                <button class="nav-item" data-view="security" onclick="switchView('security')">Security Center</button>
+            </nav>
+
+            <button class="logout-btn" onclick="logout()">Log out</button>
+        </aside>
+
+        <main class="main-panel">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Autonomous workforce intelligence</p>
+                    <h2 id="pageTitle">Command Center</h2>
+                </div>
+                <div class="topbar-actions">
+                    <span id="workspaceName" class="user-pill">Workspace</span>
+                    <span id="workspacePlan" class="user-pill">Plan</span>
+                    <span id="notificationCount" class="user-pill">0 alerts</span>
+                    <span id="userEmail" class="user-pill">Loading...</span>
+                    <button onclick="refreshCurrentView()">Refresh</button>
+                </div>
+            </header>
+
+            <section id="alertBox" class="alert hidden"></section>
+
+            <section id="dashboardView" class="view active">
+                <section class="workforce-os-panel">
+                    <div class="workforce-os-head">
+                        <div>
+                            <p class="eyebrow">Autonomous AI Workforce Operating System</p>
+                            <h3 id="workforceOSMode">Initializing operational intelligence</h3>
+                            <p id="workforceOSNarrative" class="muted">AI agents are reading hiring velocity, candidate movement, workflow health, and enterprise memory.</p>
+                        </div>
+                        <div class="ops-status">
+                            <span id="workforceOSStatus" class="status-pill status-average">Synchronizing</span>
+                            <span class="ai-pulse" aria-hidden="true"></span>
+                            <button class="secondary-btn" onclick="loadDemoEnvironment(event)">Demo Data</button>
+                        </div>
+                    </div>
+                    <div id="workforceOSMetrics" class="metric-grid os-metric-grid"></div>
+                    <div id="workforceOSLiveStrip" class="live-os-strip"></div>
+                    <div class="workforce-os-grid">
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>Autonomous Priorities</h4>
+                                <span class="muted">Bottlenecks, staffing risk, and next best actions.</span>
+                            </div>
+                            <div id="workforceOSPriorities" class="stack-list"></div>
+                        </div>
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>AI Agent Mesh</h4>
+                                <span class="muted">Specialized agents coordinating hiring operations.</span>
+                            </div>
+                            <div id="workforceOSAgents" class="agent-grid"></div>
+                        </div>
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>Predictive Simulations</h4>
+                                <span class="muted">Scenario forecasts for delay, growth, and hiring outcomes.</span>
+                            </div>
+                            <div id="workforceOSSimulations" class="simulation-grid"></div>
+                        </div>
+                    </div>
+                    <div class="workforce-infra-grid">
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>Enterprise Connectors</h4>
+                                <span class="muted">Email, calendar, messaging, HR, and sourcing infrastructure.</span>
+                            </div>
+                            <div id="workforceOSConnectors" class="connector-grid"></div>
+                        </div>
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>AI Operations</h4>
+                                <span class="muted">Provider health, cost, reliability, and failover intelligence.</span>
+                            </div>
+                            <div id="workforceOSAIOps" class="infra-stack"></div>
+                        </div>
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>Governance & Market</h4>
+                                <span class="muted">Compliance posture, retention, scarcity, and competitiveness.</span>
+                            </div>
+                            <div id="workforceOSGovernance" class="infra-stack"></div>
+                        </div>
+                        <div>
+                            <div class="panel-subhead">
+                                <h4>Production Readiness</h4>
+                                <span class="muted">Workflow, security, performance, and demo readiness.</span>
+                            </div>
+                            <div id="workforceOSReadiness" class="infra-stack"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="metric-grid">
+                    <article class="metric-card">
+                        <span>Total Candidates</span>
+                        <strong id="metricCandidates">--</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Total Jobs</span>
+                        <strong id="metricJobs">--</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Shortlisted</span>
+                        <strong id="metricShortlisted">0</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Top Match Score</span>
+                        <strong id="metricTopScore">--</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Recent Uploads</span>
+                        <strong id="metricReports">--</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Team Members</span>
+                        <strong id="metricMembers">--</strong>
+                    </article>
+                </div>
+
+                <div class="dashboard-grid">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h3>Top Ranked Candidates</h3>
+                            <button onclick="switchView('matches')">View Matches</button>
+                        </div>
+                        <div id="dashboardRanking" class="stack-list">
+                            <div class="empty-state">Ranking intelligence is standing by while the workspace synchronizes.</div>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h3>Upload & Process</h3>
+                            <button onclick="switchView('upload')">Upload</button>
+                        </div>
+                        <p class="muted">Upload PDF or DOCX resumes, extract skills, and run matching against your latest job description.</p>
+                        <div id="topSkills" class="skill-cloud"></div>
+                    </section>
+                </div>
+
+                <div class="dashboard-grid">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>AI Operations Pulse</h3>
+                                <p class="muted">Live system intelligence: recommendations, workflow events, and risk signals.</p>
+                            </div>
+                            <div class="ops-status">
+                                <span id="opsPresence" class="status-pill">Offline</span>
+                                <span class="ai-pulse" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <div id="opsRecommendations" class="stack-list"></div>
+                        <div id="opsFeed" class="ops-feed"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Executive AI Brief</h3>
+                                <p class="muted">A calm summary of pipeline health, risks, and recommended next steps.</p>
+                            </div>
+                            <div class="panel-actions">
+                                <button class="secondary-btn" onclick="loadDashboardExecutiveBrief(true)">Refresh</button>
+                                <button onclick="openExecutiveBrief()">Open</button>
+                            </div>
+                        </div>
+                        <div id="dashboardExecutiveBrief" class="exec-brief"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Hiring Funnel</h3>
+                                <p class="muted">A live view of pipeline health and conversion signals.</p>
+                            </div>
+                        </div>
+                        <div class="funnel-grid">
+                            <div class="funnel-step">
+                                <span class="muted">Applied</span>
+                                <strong id="funnelApplied">--</strong>
+                            </div>
+                            <div class="funnel-step">
+                                <span class="muted">Screened</span>
+                                <strong id="funnelScreened">--</strong>
+                            </div>
+                            <div class="funnel-step">
+                                <span class="muted">Shortlisted</span>
+                                <strong id="funnelShortlisted">--</strong>
+                            </div>
+                            <div class="funnel-step">
+                                <span class="muted">Hired</span>
+                                <strong id="funnelHired">--</strong>
+                            </div>
+                        </div>
+                        <div class="mini-chart">
+                            <canvas id="matchDistributionChart" width="560" height="160" aria-label="Match distribution chart"></canvas>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="candidatesView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Candidates</h3>
+                            <p class="muted">Parsed resumes and extracted skills from the backend.</p>
+                        </div>
+                    </div>
+                    <div id="candidateTable"></div>
+                </section>
+            </section>
+
+            <section id="jobsView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Create Job</h3>
+                            <p class="muted">The latest job is used automatically when no match description is provided.</p>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <input id="jobTitle" placeholder="Job title">
+                        <textarea id="jobDesc" placeholder="Job description with required skills"></textarea>
+                        <button onclick="createJob(event)">Create Job</button>
+                    </div>
+                    <p id="jobStatus" class="form-status"></p>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <h3>Job Listings</h3>
+                    </div>
+                    <div id="jobList" class="job-list"></div>
+                </section>
+            </section>
+
+            <section id="uploadView" class="view">
+                <section class="panel upload-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Upload Resume</h3>
+                            <p class="muted">Supports PDF, DOCX, and TXT. Scanned/image-based PDFs may require OCR.</p>
+                        </div>
+                    </div>
+                    <div class="upload-box">
+                        <div class="drop-zone" id="resumeDropZone">
+                            <strong>Drop resume here</strong>
+                            <span>PDF, DOCX, or TXT, up to your backend upload limit</span>
+                            <input id="resumeFileInput" type="file" accept=".pdf,.docx,.txt">
+                        </div>
+                        <input id="candidateIdInput" placeholder="Candidate ID (optional)">
+                        <button onclick="uploadResume(event)">Upload and Process</button>
+                    </div>
+                    <div id="uploadStatus" class="upload-status"></div>
+                </section>
+            </section>
+
+            <section id="matchesView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>AI Match Results</h3>
+                            <p class="muted">Paste a job description or leave blank to use the latest saved job.</p>
+                        </div>
+                    </div>
+                    <div class="match-controls">
+                        <textarea id="matchJobDescription" placeholder="Paste job description for matching"></textarea>
+                        <button id="matchRunButton" onclick="runMatch()">Run Match</button>
+                        <button class="secondary-btn" onclick="runDecisionAI()">Recruiter Decision AI</button>
+                    </div>
+                    <div id="matchStatus" class="upload-status"></div>
+                    <div id="decisionPanel" class="decision-panel hidden"></div>
+                    <div id="matchResults"></div>
+                </section>
+
+                <section class="panel ai-feedback-panel">
+                    <div class="panel-header">
+                        <h3>AI Feedback</h3>
+                        <button onclick="refreshAIFeedback()">Analyze Candidate</button>
+                    </div>
+                    <div id="feedbackPanel" class="feedback-grid">
+                        <div class="feedback-card">
+                            <h4>Match Score</h4>
+                            <div id="feedbackScore" class="feedback-mode"></div>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>Skills</h4>
+                            <div id="feedbackSkills" class="skill-cloud"></div>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>Missing Skills</h4>
+                            <div id="feedbackMissing" class="skill-cloud"></div>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>Strengths</h4>
+                            <ul id="feedbackStrengths" class="feedback-list"></ul>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>Suggestions</h4>
+                            <ul id="feedbackSuggestions" class="feedback-list"></ul>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>Recommended Roles</h4>
+                            <div id="feedbackRoles" class="skill-cloud"></div>
+                        </div>
+                        <div class="feedback-card">
+                            <h4>AI Mode</h4>
+                            <div id="feedbackMode" class="feedback-mode"></div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <section id="brainView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>AI Decision Brain</h3>
+                            <p class="muted">Candidate 360 profiles, explainable decisions, risks, readiness, and next actions.</p>
+                        </div>
+                        <button class="secondary-btn" onclick="openCommandPalette()">Commands</button>
+                    </div>
+
+                    <div class="form-grid compact-form">
+                        <input id="brainCandidateId" placeholder="Candidate ID">
+                        <input id="brainJobId" placeholder="Job ID (optional)">
+                        <button onclick="analyzeCandidate360(event)">Generate 360</button>
+                        <button class="secondary-btn" onclick="generateExecutiveBrief(event)">Executive Brief</button>
+                    </div>
+
+                    <textarea id="brainJobDescription" placeholder="Optional job description context (leave empty to use the latest job)"></textarea>
+
+                    <div id="brainStatus" class="upload-status"></div>
+                    <div id="brainResult" class="brain-grid"></div>
+
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Automation Rules</h3>
+                            <p class="muted">Define simple triggers like "auto-shortlist when score &gt;= 75 and gaps &lt;= 3".</p>
+                        </div>
+                        <button class="secondary-btn" onclick="loadAutomationRules()">Refresh</button>
+                    </div>
+                    <div class="form-grid compact-form">
+                        <input id="ruleName" placeholder="Rule name" value="Auto-shortlist strong matches">
+                        <input id="ruleMinScore" type="number" min="0" max="100" value="75" placeholder="Min score">
+                        <input id="ruleMaxMissing" type="number" min="0" max="20" value="3" placeholder="Max missing skills">
+                        <button onclick="saveDefaultAutomationRule(event)">Save Rule</button>
+                    </div>
+                    <div id="rulesStatus" class="upload-status"></div>
+                    <div id="rulesList" class="stack-list"></div>
+                </section>
+            </section>
+
+            <section id="shortlistView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Candidate Shortlist</h3>
+                            <p class="muted">Review, approve, reject, and export top candidates per job.</p>
+                        </div>
+                    </div>
+                    <div class="match-controls">
+                        <select id="shortlistJobSelect"></select>
+                        <input id="shortlistThreshold" type="number" min="0" max="100" value="75" placeholder="Threshold">
+                        <button onclick="runAutoShortlist(event)">Auto-Shortlist</button>
+                        <button class="secondary-btn" onclick="refreshShortlist()">Refresh</button>
+                        <button class="secondary-btn" onclick="exportShortlistCsv()">Export</button>
+                    </div>
+                    <div id="shortlistStatus" class="upload-status"></div>
+                    <div id="shortlistAnalytics" class="metric-grid"></div>
+                    <div id="shortlistEntries" class="stack-list"></div>
+                </section>
+            </section>
+
+            <section id="interviewView" class="view">
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>AI Interview System</h3>
+                            <p class="muted">Real-time automated interview with face detection and behavioral analysis</p>
+                        </div>
+                    </div>
+
+                    <div class="interview-setup">
+                        <div class="setup-controls">
+                            <input type="text" id="interviewCandidateId" placeholder="Candidate ID" required>
+                            <input type="text" id="interviewSessionId" placeholder="Session ID (auto-generated if empty)">
+                            <button id="startInterviewBtn" onclick="startInterview()">Start Interview</button>
+                            <button id="endInterviewBtn" onclick="endInterview()" disabled>End Interview</button>
+                        </div>
+                    </div>
+
+                    <div class="interview-grid">
+                        <div class="interview-video-panel">
+                            <h4>Live Video Feed</h4>
+                            <video id="interviewVideo" autoplay muted playsinline></video>
+                            <div class="video-controls">
+                                <button id="startVideoBtn" onclick="startInterviewVideo()">Start Camera</button>
+                                <button class="secondary-btn" onclick="verifyInterviewFace()">Verify Face</button>
+                                <button id="stopVideoBtn" onclick="stopInterviewVideo()" disabled>Stop Camera</button>
+                            </div>
+                            <div id="faceStatus" class="status-indicator">
+                                <span class="status-dot" id="faceStatusDot"></span>
+                                <span id="faceStatusText">Camera not started</span>
+                            </div>
+                        </div>
+
+                        <div class="interview-chat-panel">
+                            <h4>Interview Questions</h4>
+                            <div class="progress-bar">
+                                <div id="interviewProgressFill" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                            <div id="interviewProgressText" class="muted">0 of 0 questions completed</div>
+                            <div id="interviewQuestions" class="interview-questions">
+                                <div class="question-card">
+                                    <p class="question-text">Click "Start Interview" to begin the automated interview process.</p>
+                                </div>
+                            </div>
+
+                            <div class="response-input">
+                                <textarea id="interviewResponse" placeholder="Type your response here..." rows="3"></textarea>
+                                <div class="voice-controls">
+                                    <button id="startVoiceBtn" class="secondary-btn" onclick="startInterviewVoice()">Start Voice</button>
+                                    <button id="stopVoiceBtn" class="secondary-btn" onclick="stopInterviewVoice()" disabled>Stop Voice</button>
+                                    <button id="submitResponseBtn" onclick="submitResponse()" disabled>Submit Response</button>
+                                </div>
+                                <div id="liveTranscript" class="transcript-panel">Live transcript will appear here.</div>
+                            </div>
+
+                            <div id="interviewAlerts" class="interview-alerts"></div>
+                        </div>
+
+                        <div class="interview-analysis-panel">
+                            <h4>Real-time Analysis</h4>
+                            <div class="analysis-metrics">
+                                <div class="metric-item">
+                                    <span class="metric-label">Attention:</span>
+                                    <span class="metric-value" id="attentionMetric">Awaiting signal</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Response Score:</span>
+                                    <span class="metric-value" id="responseMetric">Awaiting answer</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Question Type:</span>
+                                    <span class="metric-value" id="questionTypeMetric">Not started</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Live Score:</span>
+                                    <span class="metric-value" id="liveScoreMetric">Awaiting signal</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Confidence:</span>
+                                    <span class="metric-value" id="liveConfidenceMetric">Awaiting signal</span>
+                                </div>
+                            </div>
+                            <div id="liveSignals" class="signal-panel"></div>
+
+                            <div class="evaluation-panel">
+                                <h4>Interview Evaluation</h4>
+                                <button id="generateEvaluationBtn" onclick="generateEvaluation()" disabled>Generate Final Evaluation</button>
+                                <div id="evaluationResults" class="evaluation-results"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <section id="enterpriseView" class="view">
+                <div class="dashboard-grid">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Team Management</h3>
+                                <p class="muted">Invite recruiters, interviewers, and hiring managers into this workspace.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid compact-form">
+                            <input id="teamInviteEmail" placeholder="teammate@company.com">
+                            <select id="teamInviteRole">
+                                <option value="recruiter">Recruiter</option>
+                                <option value="interviewer">Interviewer</option>
+                                <option value="hiring_manager">Hiring Manager</option>
+                                <option value="company_admin">Company Admin</option>
+                                <option value="candidate">Candidate</option>
+                            </select>
+                            <button onclick="inviteTeamMember(event)">Invite</button>
+                        </div>
+                        <div id="teamPanel" class="stack-list"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Billing & Usage</h3>
+                                <p class="muted">M-Pesa, PayPal, card checkout readiness, invoices, subscriptions, and AI credit metering.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid compact-form">
+                            <select id="billingPlanSelect">
+                                <option value="free">Free</option>
+                                <option value="pro">Pro</option>
+                                <option value="enterprise">Enterprise</option>
+                            </select>
+                            <select id="billingCycleSelect">
+                                <option value="monthly">Monthly</option>
+                                <option value="yearly">Yearly</option>
+                            </select>
+                            <select id="billingCurrencySelect">
+                                <option value="KES">KES</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                                <option value="GBP">GBP</option>
+                            </select>
+                            <button onclick="changeBillingPlan(event)">Update Plan</button>
+                            <button class="secondary-btn" onclick="generateInvoice(event)">Generate Invoice</button>
+                        </div>
+                        <div class="form-grid compact-form">
+                            <input id="mpesaPhoneInput" placeholder="M-Pesa phone e.g. 254798733849">
+                            <button onclick="startMpesaPayment(event)">M-Pesa STK Push</button>
+                            <button class="secondary-btn" onclick="startProviderCheckout(event, 'paypal')">PayPal</button>
+                            <button class="secondary-btn" onclick="startProviderCheckout(event, 'flutterwave')">Card</button>
+                            <button class="secondary-btn" onclick="startProviderCheckout(event, 'paddle')">Paddle</button>
+                            <button class="danger-btn" onclick="cancelSubscription(event)">Cancel</button>
+                        </div>
+                        <div id="paymentStatus" class="upload-status"></div>
+                        <div id="billingPanel" class="stack-list"></div>
+                    </section>
+                </div>
+
+                <div class="dashboard-grid">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Candidate Intelligence</h3>
+                                <p class="muted">Skill graph, role fit, performance and retention predictions.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid compact-form">
+                            <input id="intelCandidateId" placeholder="Candidate ID">
+                            <button onclick="loadCandidateIntelligence(event)">Analyze</button>
+                        </div>
+                        <div id="candidateIntelPanel" class="stack-list"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Assessments & Scheduling</h3>
+                                <p class="muted">Issue skill tests and schedule interviews with meeting links.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid compact-form">
+                            <input id="assessmentCandidateId" placeholder="Candidate ID">
+                            <button onclick="createAssessment(event)">Create Assessment</button>
+                            <input id="scheduleCandidateId" placeholder="Candidate ID">
+                            <input id="scheduleInterviewerEmail" placeholder="interviewer@company.com">
+                            <input id="scheduleStartsAt" type="datetime-local">
+                            <button onclick="createSchedule(event)">Schedule Interview</button>
+                        </div>
+                        <div id="assessmentSchedulePanel" class="stack-list"></div>
+                    </section>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Fairness & Compliance</h3>
+                            <p class="muted">Bias detection, consent tracking, and compliance-ready records.</p>
+                        </div>
+                    </div>
+                    <div class="match-controls">
+                        <textarea id="biasCheckText" placeholder="Paste job description or evaluation text"></textarea>
+                        <button onclick="runBiasCheck(event)">Check Bias</button>
+                    </div>
+                    <div id="compliancePanel" class="stack-list"></div>
+                </section>
+            </section>
+
+            <section id="securityView" class="view">
+                <div class="dashboard-grid security-grid">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>AI Security Copilot</h3>
+                                <p class="muted">Live incident workflows, containment guidance, and autonomous security recommendations.</p>
+                            </div>
+                            <div class="security-head-actions">
+                                <span id="securityStreamStatus" class="status-pill status-average">Live: connecting</span>
+                                <button class="secondary-btn" onclick="connectSecurityStream()">Connect Live</button>
+                                <button onclick="loadSecurityCenter()">Refresh</button>
+                            </div>
+                        </div>
+
+                        <div id="securitySummary" class="metric-grid"></div>
+
+                        <div class="form-grid compact-form">
+                            <select id="securityEventType">
+                                <option value="auth.failed">Failed login</option>
+                                <option value="auth.refresh_reuse">Token misuse</option>
+                                <option value="candidate.mass_export">Mass export</option>
+                                <option value="admin.role_change">Privilege escalation</option>
+                                <option value="interview.proctor_alert">Interview manipulation</option>
+                            </select>
+                            <input id="securitySourceIp" placeholder="Source IP">
+                            <button onclick="simulateSecurityEvent(event)">Analyze Event</button>
+                        </div>
+
+                        <div class="security-soc-layout">
+                            <div>
+                                <div class="panel-subhead">
+                                    <h4>Incidents</h4>
+                                    <select id="securityIncidentFilter" onchange="loadSecurityIncidents(event)">
+                                        <option value="">All</option>
+                                        <option value="open">Open</option>
+                                        <option value="contained">Contained</option>
+                                        <option value="resolved">Resolved</option>
+                                    </select>
+                                </div>
+                                <div id="securityIncidents" class="stack-list"></div>
+                            </div>
+                            <div>
+                                <div class="panel-subhead">
+                                    <h4>Response & Timeline</h4>
+                                    <button class="secondary-btn" onclick="refreshSelectedSecurityIncident()">Refresh</button>
+                                </div>
+                                <div id="securityIncidentDetail" class="security-incident-detail"></div>
+                                <div id="securityIncidentActions" class="stack-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="panel-subhead">
+                            <h4>Recent Signals</h4>
+                            <span class="muted">Latest events detected by the platform.</span>
+                        </div>
+                        <div id="securityTimeline" class="stack-list"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>Control Center</h3>
+                                <p class="muted">Active protections and security posture visibility.</p>
+                            </div>
+                            <button class="secondary-btn" onclick="loadSecurityControls()">Refresh</button>
+                        </div>
+                        <div id="securityControls" class="stack-list"></div>
+
+                        <div class="panel-header" style="margin-top: 18px;">
+                            <div>
+                                <h3>Automation Rules</h3>
+                                <p class="muted">Operational guardrails. Defaults are recommendation-first until enabled.</p>
+                            </div>
+                            <button class="secondary-btn" onclick="loadSecurityRules()">Refresh</button>
+                        </div>
+                        <div id="securityAutomationRules" class="stack-list"></div>
+
+                        <div class="panel-header" style="margin-top: 18px;">
+                            <div>
+                                <h3>Live Security Feed</h3>
+                                <p class="muted">Realtime security events, incident updates, and defensive actions.</p>
+                            </div>
+                        </div>
+                        <div id="securityLiveFeed" class="security-live-feed"></div>
+                    </section>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="commandPalette" class="command-palette hidden" role="dialog" aria-label="Command palette">
+        <div class="palette-card">
+            <div class="palette-head">
+                <input id="commandInput" placeholder="Search commands, candidates, or actions..." autocomplete="off">
+                <button class="secondary-btn" onclick="closeCommandPalette()">Close</button>
+            </div>
+            <div id="commandList" class="palette-list"></div>
+            <div class="palette-foot muted">Tip: Press Ctrl+K to open. Use arrow keys and Enter to run.</div>
+        </div>
+    </div>
+
+    <button class="chat-toggle" onclick="toggleChat()" aria-label="Open recruiter copilot">Copilot</button>
+    <div id="chatWidget" class="chat-widget hidden">
+        <div class="chat-header">
+            <span>WorkforceOS Copilot</span>
+            <button onclick="toggleChat()">×</button>
+        </div>
+        <div class="chat-shortcuts">
+            <button onclick="useChatShortcut('/compare top candidates')">Compare</button>
+            <button onclick="useChatShortcut('/interview generate questions')">Interview</button>
+            <button onclick="useChatShortcut('/pipeline explain bottlenecks')">Pipeline</button>
+            <button onclick="useChatShortcut('I need support')">Support</button>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-row">
+            <input id="chatInput" placeholder="Ask WorkforceOS about candidates, risks, workflows..." autocomplete="off">
+            <button id="chatSendBtn" onclick="sendChatMessage()">Send</button>
+        </div>
+        <div id="chatStatus" class="upload-status"></div>
+    </div>
+
+    <div id="candidateModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">×</button>
+            <h3 id="modalName"></h3>
+            <p class="muted" id="modalInsight"></p>
+            <div id="modalScore"></div>
+            <h4>Skills</h4>
+            <div id="modalSkills" class="skill-cloud"></div>
+            <h4>Extracted Text</h4>
+            <p id="modalSnippet" class="snippet"></p>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/app-mid.js"></script>
+    <script src="js/app-core.js"></script>
+    <script src="js/app-tail.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+<section class="enterprise-page">
+    <p class="eyebrow">Role Operations</p>
+    <h2>Hiring Role Intelligence</h2>
+    <p class="section-desc">Create clear role context so matching, shortlist guidance, interviews, and workforce forecasts have reliable evidence.</p>
+
+    <div class="panel">
+        <h3>Create Hiring Role</h3>
+        <div class="form-grid">
+            <input id="jobTitle" placeholder="Role title, for example Senior Backend Engineer">
+            <textarea id="jobDesc" placeholder="Role scope, must-have skills, seniority expectations, and hiring urgency"></textarea>
+            <button onclick="createJob()">Create Role</button>
+        </div>
+        <p id="jobStatus" class="muted"></p>
+    </div>
+
+    <div class="panel">
+        <h3>Active Role Context</h3>
+        <div id="jobList" class="stack-list"></div>
+    </div>
+</section>

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkforceOS Interview Intelligence</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        .interview-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .interview-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .interview-header h1 {
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+
+        .interview-header p {
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .setup-section {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .setup-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--card-soft);
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .setup-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .interview-main {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .interview-panel {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .video-section {
+            margin-bottom: 24px;
+        }
+
+        .video-container {
+            position: relative;
+            background: var(--bg);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        #interviewVideo {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .video-placeholder {
+            width: 100%;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--card-soft);
+            border: 2px dashed var(--line);
+            border-radius: 8px;
+            color: var(--muted);
+        }
+
+        .video-controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .question-section {
+            margin-bottom: 24px;
+        }
+
+        .question-card {
+            background: var(--card-soft);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .question-type {
+            background: var(--primary);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .question-timer {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .question-text {
+            font-size: 18px;
+            color: var(--text);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .answer-section {
+            margin-bottom: 24px;
+        }
+
+        .answer-input {
+            width: 100%;
+            min-height: 120px;
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--card-soft);
+            color: var(--text);
+            font-size: 16px;
+            resize: vertical;
+        }
+
+        .answer-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+
+        .sidebar-panel {
+            position: sticky;
+            top: 20px;
+            height: fit-content;
+        }
+
+        .progress-section {
+            margin-bottom: 24px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--card-soft);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .metrics-section {
+            margin-bottom: 24px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .metric-item {
+            background: var(--card-soft);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            display: block;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .alerts-section {
+            margin-bottom: 24px;
+        }
+
+        .alert-item {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            color: #FCA5A5;
+            font-size: 14px;
+        }
+
+        .evaluation-section {
+            background: var(--card-soft);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .evaluation-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .final-score {
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .recommendation {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .recommendation.strong-hire {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ADE80;
+        }
+
+        .recommendation.hire {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60A5FA;
+        }
+
+        .recommendation.consider {
+            background: rgba(234, 179, 8, 0.2);
+            color: #FACC15;
+        }
+
+        .recommendation.reject {
+            background: rgba(239, 68, 68, 0.2);
+            color: #F87171;
+        }
+
+        .evaluation-breakdown {
+            margin-top: 20px;
+        }
+
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .breakdown-item {
+            text-align: center;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 6px;
+        }
+
+        .breakdown-score {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            display: block;
+        }
+
+        .breakdown-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .insights-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .insights-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--line);
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .insights-list li:last-child {
+            border-bottom: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-indicator.active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ADE80;
+        }
+
+        .status-indicator.inactive {
+            background: rgba(156, 163, 175, 0.2);
+            color: #9CA3AF;
+        }
+
+        .status-indicator.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #F87171;
+        }
+
+        @media (max-width: 1024px) {
+            .interview-main {
+                grid-template-columns: 1fr;
+            }
+
+            .setup-form {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .interview-container {
+                padding: 16px;
+            }
+
+            .video-controls,
+            .answer-actions {
+                flex-direction: column;
+            }
+
+            .metric-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="globalLoader" class="global-loader">
+        <div class="loader-card">Processing...</div>
+    </div>
+
+    <div class="interview-container">
+        <div class="interview-header">
+            <h1>AI Interview Intelligence</h1>
+            <p>Automated candidate evaluation with real-time feedback and comprehensive scoring</p>
+        </div>
+
+        <!-- Setup Section -->
+        <div id="setupSection" class="setup-section">
+            <h2>Interview Setup</h2>
+            <div class="setup-form">
+                <div class="form-group">
+                    <label for="candidateId">Candidate ID</label>
+                    <input type="text" id="candidateId" placeholder="Enter candidate ID" required>
+                </div>
+                <div class="form-group">
+                    <label for="experienceLevel">Experience Level</label>
+                    <select id="experienceLevel">
+                        <option value="junior">Junior (0-2 years)</option>
+                        <option value="mid" selected>Mid-level (3-5 years)</option>
+                        <option value="senior">Senior (6+ years)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interviewType">Interview Type</label>
+                    <select id="interviewType">
+                        <option value="technical">Technical Only</option>
+                        <option value="behavioral">Behavioral Only</option>
+                        <option value="mixed" selected>Mixed (Technical + Behavioral)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="jobDescription">Job Description (Optional)</label>
+                    <textarea id="jobDescription" placeholder="Paste job description for personalized questions"></textarea>
+                </div>
+            </div>
+            <div class="setup-actions">
+                <button id="startInterviewBtn" onclick="startInterview()">Start Interview</button>
+                <button id="endInterviewBtn" onclick="endInterview()" disabled>End Interview</button>
+            </div>
+        </div>
+
+        <!-- Main Interview Interface -->
+        <div id="interviewInterface" class="interview-main hidden">
+            <!-- Left Panel - Interview -->
+            <div class="interview-panel">
+                <!-- Video Section -->
+                <div class="video-section">
+                    <h3>Live Video Feed</h3>
+                    <div class="video-container">
+                        <div id="videoPlaceholder" class="video-placeholder">
+                            <div>
+                                <p>Camera not started</p>
+                                <small>Click "Start Camera" to begin</small>
+                            </div>
+                        </div>
+                        <video id="interviewVideo" autoplay muted playsinline style="display: none;"></video>
+                    </div>
+                    <div class="video-controls">
+                        <button id="startCameraBtn" onclick="startCamera()">Start Camera</button>
+                        <button class="secondary-btn" onclick="verifyFace()">Verify Face</button>
+                        <button id="stopCameraBtn" onclick="stopCamera()" disabled>Stop Camera</button>
+                        <span id="cameraStatus" class="status-indicator inactive">Camera Off</span>
+                    </div>
+                </div>
+
+                <!-- Question Section -->
+                <div class="question-section">
+                    <h3>Interview Questions</h3>
+                    <div id="questionContainer">
+                        <div class="question-card">
+                            <p class="question-text">Click "Start Interview" to begin the automated interview process.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Answer Section -->
+                <div class="answer-section">
+                    <h3>Your Answer</h3>
+                    <textarea id="answerInput" class="answer-input" placeholder="Type your response here..." disabled></textarea>
+                    <div class="answer-actions">
+                        <button id="startVoiceBtn" class="secondary-btn" onclick="startVoiceInput()">Start Voice</button>
+                        <button id="stopVoiceBtn" class="secondary-btn" onclick="stopVoiceInput()" disabled>Stop Voice</button>
+                        <button id="submitAnswerBtn" onclick="submitAnswer()" disabled>Submit Answer</button>
+                    </div>
+                    <div id="liveTranscript" class="transcript-panel">Live transcript will appear here.</div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Monitoring & Results -->
+            <div class="sidebar-panel">
+                <!-- Progress -->
+                <div class="interview-panel progress-section">
+                    <h4>Interview Progress</h4>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="currentQuestion">0</span> of <span id="totalQuestions">0</span> questions
+                    </div>
+                </div>
+
+                <!-- Real-time Metrics -->
+                <div class="interview-panel metrics-section">
+                    <h4>Real-time Analysis</h4>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <span class="metric-value" id="attentionScore">-</span>
+                            <span class="metric-label">Attention</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value" id="responseScore">-</span>
+                            <span class="metric-label">Response Score</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value" id="timeEfficiency">-</span>
+                            <span class="metric-label">Time</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value" id="questionType">-</span>
+                            <span class="metric-label">Type</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value" id="liveScore">-</span>
+                            <span class="metric-label">Live Score</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value" id="liveConfidence">-</span>
+                            <span class="metric-label">Confidence</span>
+                        </div>
+                    </div>
+                    <div id="liveSignals" class="signal-panel"></div>
+                </div>
+
+                <!-- Alerts -->
+                <div class="interview-panel alerts-section">
+                    <h4>System Alerts</h4>
+                    <div id="alertsContainer">
+                        <div class="alert-item">Interview not started yet</div>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                <div class="interview-panel alerts-section">
+                    <h4>Interview Timeline</h4>
+                    <div id="interviewTimeline" class="signal-panel"></div>
+                </div>
+
+                <!-- AI Notes -->
+                <div class="interview-panel evaluation-section">
+                    <div class="evaluation-header">
+                        <h4>AI Notes</h4>
+                    </div>
+                    <ul id="aiNotesList" class="insights-list">
+                        <li>Notes will appear as the interview progresses.</li>
+                    </ul>
+                </div>
+
+                <!-- Final Evaluation -->
+                <div id="evaluationSection" class="interview-panel evaluation-section hidden">
+                    <div class="evaluation-header">
+                        <h4>Final Evaluation</h4>
+                        <div class="final-score" id="finalScore">-</div>
+                        <div class="recommendation" id="recommendation">Not evaluated</div>
+                    </div>
+
+                    <div class="evaluation-breakdown">
+                        <div class="breakdown-grid">
+                            <div class="breakdown-item">
+                                <span class="breakdown-score" id="technicalScore">-</span>
+                                <span class="breakdown-label">Technical</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-score" id="behavioralScore">-</span>
+                                <span class="breakdown-label">Behavioral</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-score" id="communicationScore">-</span>
+                                <span class="breakdown-label">Communication</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="breakdown-score" id="confidenceScore">-</span>
+                                <span class="breakdown-label">Confidence</span>
+                            </div>
+                        </div>
+
+                        <h5>Key Insights</h5>
+                        <ul id="insightsList" class="insights-list">
+                            <li>Evaluation not completed</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script src="../js/interview.js"></script>
+</body>
+</html>

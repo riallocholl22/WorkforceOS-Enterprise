@@ -1,0 +1,24 @@
+{
+  "name": "ai-recruitment-platform-frontend-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise frontend QA automation for the AI Recruitment Platform.",
+  "scripts": {
+    "qa:install": "playwright install --with-deps",
+    "frontend:serve": "python -m http.server 5500 -d frontend",
+    "backend:serve": "python -m uvicorn main:app --host 127.0.0.1 --port 8000",
+    "test:e2e": "playwright test tests/e2e",
+    "test:visual": "playwright test tests/visual",
+    "test:security": "playwright test tests/security",
+    "test:performance": "playwright test tests/performance",
+    "test:ai": "playwright test tests/ai",
+    "test:frontend": "playwright test",
+    "test:frontend:chromium": "playwright test --project=chromium",
+    "test:frontend:ci": "playwright test --reporter=line,html,junit",
+    "test:frontend:update-snapshots": "playwright test tests/visual --update-snapshots",
+    "lint:frontend": "node tests/tools/lint-frontend.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

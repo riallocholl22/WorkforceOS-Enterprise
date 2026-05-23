@@ -1,0 +1,15 @@
+{
+    "python.defaultInterpreterPath": "c:\\Users\\maria\\ai-recruitment-system\\venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "c:\\Users\\maria\\ai-recruitment-system"
+    ],
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "./resumes",
+        "-p",
+        "*test.py"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true
+}
