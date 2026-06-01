@@ -14,6 +14,11 @@ let interviewData = {
     lastLiveSignals: null,
     lastProctorSignals: null,
 };
+const WORKFORCE_INTERVIEW_TEST_MODE = Boolean(window.__WORKFORCE_TEST_MODE__ || window.__QA_BROWSER_AUDIT__);
+const WORKFORCE_INTERVIEW_LOW_POWER = WORKFORCE_INTERVIEW_TEST_MODE
+    || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+    || Number(navigator.hardwareConcurrency || 8) <= 4
+    || Number(navigator.deviceMemory || 8) <= 4;
 
 let questionTimer = null;
 let speechRecognition = null;
@@ -26,6 +31,25 @@ let lastTranscriptTickAt = 0;
 let transcriptWordCount = 0;
 let transcriptStats = { wpm: 0, filler_count: 0, silence_seconds: 0 };
 let timelineItems = [];
+let liveScoreTimer = null;
+let liveScoreBusy = false;
+let lastLiveScoreAt = 0;
+let lastLiveScoreAnswer = "";
+let liveScoreFailures = 0;
+let speechScoreTimer = null;
+let proctorFailures = 0;
+let nextProctorDelayMs = 4500;
+let lastCapturedFrameKey = "";
+let lastCapturedFrameAt = 0;
+let cameraStarting = false;
+let passiveCameraDetectionTimer = null;
+
+const LIVE_SCORE_MIN_INTERVAL_MS = 4500;
+const LIVE_SCORE_IDLE_INTERVAL_MS = WORKFORCE_INTERVIEW_LOW_POWER ? 14000 : 9000;
+const LIVE_SCORE_MIN_DELTA_CHARS = 18;
+const PROCTOR_MIN_INTERVAL_MS = WORKFORCE_INTERVIEW_LOW_POWER ? 7500 : 4500;
+const PROCTOR_MAX_INTERVAL_MS = WORKFORCE_INTERVIEW_LOW_POWER ? 26000 : 18000;
+const PROCTOR_ALERT_COOLDOWN_MS = 12000;
 
 function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -60,7 +84,7 @@ function renderTimeline() {
 
     container.innerHTML = timelineItems.length ? timelineItems.map(item => `
         <div class="mini-row" style="border-bottom:1px solid rgba(148,163,184,0.10);">
-            <span class="muted">${escapeHTML(item.kind)} · ${escapeHTML(new Date(item.ts).toLocaleTimeString())}</span>
+            <span class="muted">${escapeHTML(item.kind)} - ${escapeHTML(new Date(item.ts).toLocaleTimeString())}</span>
             <strong class="tone-${escapeHTML(item.severity === "success" ? "good" : item.severity === "error" ? "bad" : item.severity === "warn" ? "warn" : "muted")}">${escapeHTML(item.message)}</strong>
         </div>
     `).join("") : `<div class="muted">Timeline will populate during the interview.</div>`;
@@ -269,9 +293,9 @@ function startRealtimeEvaluation() {
     interviewData.evaluationInterval = setInterval(() => {
         const answer = document.getElementById("answerInput").value.trim();
         if (answer) {
-            refreshLiveScore(answer);
+            scheduleLiveScore(answer, 0);
         }
-    }, 2500);
+    }, LIVE_SCORE_IDLE_INTERVAL_MS);
 }
 
 function stopRealtimeEvaluation() {
@@ -279,23 +303,63 @@ function stopRealtimeEvaluation() {
         clearInterval(interviewData.evaluationInterval);
         interviewData.evaluationInterval = null;
     }
+    if (liveScoreTimer) {
+        clearTimeout(liveScoreTimer);
+        liveScoreTimer = null;
+    }
+    if (speechScoreTimer) {
+        clearTimeout(speechScoreTimer);
+        speechScoreTimer = null;
+    }
+}
+
+function scheduleLiveScore(answer, delayMs = LIVE_SCORE_MIN_INTERVAL_MS) {
+    if (!interviewData.isInterviewActive) return;
+    const text = String(answer || "").trim();
+    if (!text || text.length < 12) return;
+    if (liveScoreTimer) clearTimeout(liveScoreTimer);
+    liveScoreTimer = setTimeout(() => {
+        liveScoreTimer = null;
+        refreshLiveScore(text);
+    }, Math.max(0, delayMs));
 }
 
 async function refreshLiveScore(answer) {
     if (!interviewData.currentQuestion || !interviewData.isInterviewActive) {
         return;
     }
+    const normalized = String(answer || "").trim();
+    const now = Date.now();
+    const changedEnough = Math.abs(normalized.length - lastLiveScoreAnswer.length) >= LIVE_SCORE_MIN_DELTA_CHARS;
+    if (liveScoreBusy || (!changedEnough && (now - lastLiveScoreAt) < LIVE_SCORE_IDLE_INTERVAL_MS)) {
+        scheduleLiveScore(normalized, LIVE_SCORE_IDLE_INTERVAL_MS);
+        return;
+    }
+    if ((now - lastLiveScoreAt) < LIVE_SCORE_MIN_INTERVAL_MS) {
+        scheduleLiveScore(normalized, LIVE_SCORE_MIN_INTERVAL_MS - (now - lastLiveScoreAt));
+        return;
+    }
 
     try {
+        liveScoreBusy = true;
+        lastLiveScoreAt = now;
+        lastLiveScoreAnswer = normalized;
         const response = await apiInterviewRealtimeScore({
             question: interviewData.currentQuestion.question,
-            answer,
+            answer: normalized,
             time_taken: interviewData.questionStartedAt ? (Date.now() - interviewData.questionStartedAt) / 1000 : 0,
             question_type: interviewData.currentQuestion.type || "technical",
         });
+        liveScoreFailures = 0;
         updateLiveMetrics(response);
     } catch (error) {
-        console.warn("live_scoring_recovered", error);
+        liveScoreFailures += 1;
+        if (liveScoreFailures <= 2) {
+            pushTimeline("scoring", "Live scoring is backing off while the API recovers.", "warn");
+        }
+        scheduleLiveScore(normalized, Math.min(30000, LIVE_SCORE_IDLE_INTERVAL_MS * liveScoreFailures));
+    } finally {
+        liveScoreBusy = false;
     }
 }
 
@@ -410,24 +474,40 @@ function displayFinalEvaluation(evaluation) {
 
 async function startCamera() {
     try {
+        if (cameraStarting) return;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error("Camera access is not supported in this browser.");
         }
+        if (location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+            throw new Error("Camera requires a secure browser session.");
+        }
+        cameraStarting = true;
+        setCameraStatus("requesting", "Requesting permission", "Your browser will ask for camera access.");
+        if (interviewData.cameraStream) {
+            stopCamera(false);
+        }
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480 },
+            video: {
+                width: { ideal: WORKFORCE_INTERVIEW_LOW_POWER ? 320 : 480 },
+                height: { ideal: WORKFORCE_INTERVIEW_LOW_POWER ? 240 : 360 },
+                frameRate: { ideal: WORKFORCE_INTERVIEW_LOW_POWER ? 10 : 15, max: WORKFORCE_INTERVIEW_LOW_POWER ? 12 : 18 },
+            },
             audio: false,
         });
 
         interviewData.cameraStream = stream;
         const video = document.getElementById("interviewVideo");
-        video.srcObject = stream;
-        video.style.display = "block";
-        document.getElementById("videoPlaceholder").style.display = "none";
+        await attachCameraStream(video, stream);
+        stream.getVideoTracks().forEach(track => {
+            track.onended = () => {
+                if (interviewData.cameraStream === stream) stopCamera();
+            };
+        });
 
         document.getElementById("startCameraBtn").disabled = true;
         document.getElementById("stopCameraBtn").disabled = false;
-        document.getElementById("cameraStatus").className = "status-indicator active";
-        document.getElementById("cameraStatus").innerHTML = "<span>&bull;</span> Camera On";
+        setCameraStatus("detecting", "Detecting face", "Center your face in the guide.");
+        schedulePassiveCameraDetection(700);
 
         startRealtimeEvaluation();
         // If the interview is active, resume proctoring immediately when camera comes online.
@@ -437,37 +517,126 @@ async function startCamera() {
         showAlert("Camera started successfully", "success");
         pushTimeline("camera", "Camera connected.", "success");
     } catch (error) {
-        const msg = String(error?.message || error || "");
-        const lower = msg.toLowerCase();
-        if (lower.includes("permission") || lower.includes("denied")) {
-            showAlert("Camera permission is blocked. Allow camera access in your browser settings, then try again.", "error");
-        } else if (lower.includes("notfound") || lower.includes("device")) {
-            showAlert("No webcam was detected. Connect a camera and try again.", "error");
-        } else {
-            showAlert("Failed to start camera: " + msg, "error");
-        }
-        document.getElementById("cameraStatus").className = "status-indicator error";
-        document.getElementById("cameraStatus").innerHTML = "<span>&bull;</span> Camera Error";
+        const msg = cameraFriendlyMessage(error);
+        const state = /permission|required|blocked/i.test(msg) ? "blocked" : "unavailable";
+        setCameraStatus(state, state === "blocked" ? "Camera blocked" : "Camera unavailable", msg);
+        showAlert(msg, "info");
+        document.getElementById("startCameraBtn").disabled = false;
+        document.getElementById("stopCameraBtn").disabled = true;
         pushTimeline("camera", "Camera failed to start (permissions or device issue).", "error");
+    } finally {
+        cameraStarting = false;
     }
 }
 
-function stopCamera() {
+async function attachCameraStream(video, stream) {
+    if (!video) throw new Error("Camera preview is not ready.");
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.setAttribute("muted", "");
+    video.setAttribute("autoplay", "");
+    video.setAttribute("playsinline", "");
+    video.srcObject = stream;
+    video.style.display = "block";
+    const placeholder = document.getElementById("videoPlaceholder");
+    if (placeholder) placeholder.style.display = "none";
+    await new Promise(resolve => {
+        if (video.readyState >= 2 && video.videoWidth) return resolve();
+        video.onloadedmetadata = () => resolve();
+        setTimeout(resolve, 1800);
+    });
+    try {
+        await video.play();
+    } catch {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        try { await video.play(); } catch {}
+    }
+    setCameraStatus("active", "Camera active", "Live preview is running.");
+}
+
+function setCameraStatus(state, label, detail = "") {
+    const status = document.getElementById("cameraStatus");
+    const container = document.querySelector(".video-container");
+    const health = document.getElementById("cameraHealthText");
+    const confidence = document.getElementById("cameraConfidenceText");
+    if (container) {
+        container.classList.remove("camera-active", "camera-detecting", "face-detected", "low-light", "camera-blocked", "camera-unavailable");
+        const cls = {
+            active: "camera-active",
+            requesting: "camera-detecting",
+            detecting: "camera-detecting",
+            face: "face-detected",
+            "low-light": "low-light",
+            blocked: "camera-blocked",
+            unavailable: "camera-unavailable",
+        }[state];
+        if (cls) container.classList.add(cls);
+    }
+    if (status) {
+        status.className = `status-indicator ${["blocked", "unavailable"].includes(state) ? "error" : state === "stopped" || state === "idle" ? "inactive" : "active"}`;
+        status.innerHTML = `<span>&bull;</span> ${escapeHTML(label || "Camera idle")}`;
+    }
+    if (health) health.textContent = label || "Camera idle";
+    if (confidence && detail) confidence.textContent = detail;
+}
+
+function cameraFriendlyMessage(error) {
+    const name = String(error?.name || "");
+    const raw = String(error?.message || error || "");
+    if (/notallowed|permission|denied/i.test(`${name} ${raw}`)) return "Camera permission is required to begin proctored interview.";
+    if (/notfound|devicesnotfound|device/i.test(`${name} ${raw}`)) return "Camera unavailable. Connect a webcam and try again.";
+    if (/notreadable|trackstart|in use/i.test(`${name} ${raw}`)) return "Camera is already in use by another app. Close the other app and try again.";
+    if (/security|insecure|secure/i.test(`${name} ${raw}`)) return "Camera requires a secure browser session. Open WorkforceOS over HTTPS.";
+    return "Camera could not start. Check browser permissions and try again.";
+}
+
+function stopCamera(showStopped = true) {
     if (interviewData.cameraStream) {
+        interviewData.cameraStream.getTracks().forEach(track => { track.onended = null; });
         interviewData.cameraStream.getTracks().forEach(track => track.stop());
         interviewData.cameraStream = null;
     }
 
     const video = document.getElementById("interviewVideo");
     video.style.display = "none";
+    video.pause();
     video.srcObject = null;
+    video.removeAttribute("src");
+    video.load?.();
     document.getElementById("videoPlaceholder").style.display = "flex";
     document.getElementById("startCameraBtn").disabled = false;
     document.getElementById("stopCameraBtn").disabled = true;
-    document.getElementById("cameraStatus").className = "status-indicator inactive";
-    document.getElementById("cameraStatus").innerHTML = "<span>&bull;</span> Camera Off";
+    if (showStopped) setCameraStatus("stopped", "Camera stopped", "Start camera to resume the live preview.");
     stopProctoringLoop();
-    pushTimeline("camera", "Camera stopped.", "info");
+    if (passiveCameraDetectionTimer) {
+        clearTimeout(passiveCameraDetectionTimer);
+        passiveCameraDetectionTimer = null;
+    }
+    if (showStopped) pushTimeline("camera", "Camera stopped.", "info");
+}
+
+function schedulePassiveCameraDetection(delayMs = 800) {
+    if (passiveCameraDetectionTimer) clearTimeout(passiveCameraDetectionTimer);
+    passiveCameraDetectionTimer = setTimeout(runPassiveCameraDetection, Math.max(500, Number(delayMs) || 800));
+}
+
+async function runPassiveCameraDetection() {
+    passiveCameraDetectionTimer = null;
+    if (!interviewData.cameraStream) return;
+    try {
+        const imageBase64 = await captureFaceFrame();
+        const candidateId = interviewData.candidateId || document.getElementById("candidateId")?.value.trim() || "";
+        const data = await apiFaceVerify({ image_base64: imageBase64, candidate_id: candidateId });
+        if (data?.verified) {
+            setCameraStatus("face", "Face detected", "Confidence strong");
+        } else if (!interviewData.isInterviewActive) {
+            setCameraStatus("detecting", "Detecting face", "No face detected yet. Center your face in the frame.");
+            schedulePassiveCameraDetection(6500);
+        }
+    } catch {
+        if (interviewData.cameraStream && !interviewData.isInterviewActive) schedulePassiveCameraDetection(7500);
+    }
 }
 
 async function captureFaceFrame() {
@@ -477,10 +646,12 @@ async function captureFaceFrame() {
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const maxWidth = WORKFORCE_INTERVIEW_LOW_POWER ? 240 : 320;
+    const scale = Math.min(1, maxWidth / Math.max(1, video.videoWidth));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/png");
+    return canvas.toDataURL("image/jpeg", WORKFORCE_INTERVIEW_LOW_POWER ? 0.42 : 0.50);
 }
 
 async function verifyFace() {
@@ -499,6 +670,7 @@ async function verifyFace() {
             : "<span>&bull;</span> Face Not Verified";
         showAlert(response.message || "Face verification complete", response.verified ? "success" : "error");
         pushTimeline("face", response.verified ? "Face verified." : "Face not verified.", response.verified ? "success" : "warn");
+        setCameraStatus(response.verified ? "face" : "detecting", response.verified ? "Face detected" : "Detecting face", response.verified ? "Confidence strong" : "No face detected yet. Center your face in the frame.");
     } catch (error) {
         showAlert("Face verification failed: " + error.message, "error");
         pushTimeline("face", "Face verification failed.", "error");
@@ -520,38 +692,61 @@ async function bootstrapInterviewHealth() {
 
 function stopProctoringLoop() {
     if (proctorInterval) {
-        clearInterval(proctorInterval);
+        clearTimeout(proctorInterval);
         proctorInterval = null;
     }
 }
 
 function startProctoringLoop() {
     stopProctoringLoop();
+    if (WORKFORCE_INTERVIEW_TEST_MODE) return;
     if (!interviewData.isInterviewActive) return;
     if (!interviewData.sessionId) return;
     if (!interviewData.candidateId) return;
     if (!interviewData.cameraStream) return;
 
-    // Capture a frame every ~2s (cheap enough, feels realtime, doesn't melt CPUs).
-    proctorInterval = setInterval(async () => {
+    const tick = async () => {
         try {
-            if (proctorBusy) return;
+            if (proctorBusy) {
+                proctorInterval = setTimeout(tick, Math.min(PROCTOR_MAX_INTERVAL_MS, nextProctorDelayMs + 1000));
+                return;
+            }
             if (!interviewData.isInterviewActive || !interviewData.cameraStream) return;
+            if (document.visibilityState === "hidden") {
+                proctorInterval = setTimeout(tick, PROCTOR_MAX_INTERVAL_MS);
+                return;
+            }
             proctorBusy = true;
             const imageBase64 = await captureFaceFrame();
+            const frameKey = imageBase64.slice(0, 180) + imageBase64.slice(-180);
+            const now = Date.now();
+            if (frameKey === lastCapturedFrameKey && now - lastCapturedFrameAt < 10000) {
+                nextProctorDelayMs = Math.min(PROCTOR_MAX_INTERVAL_MS, nextProctorDelayMs + 2500);
+                return;
+            }
+            lastCapturedFrameKey = frameKey;
+            lastCapturedFrameAt = now;
             const result = await apiInterviewProctor({
                 session_id: interviewData.sessionId,
                 candidate_id: interviewData.candidateId,
                 image_base64: imageBase64,
             });
+            proctorFailures = 0;
             updateProctorSignals(result || {});
         } catch (err) {
-            // Don't spam alerts; just keep the system resilient.
-            console.warn("proctoring_error", err);
+            proctorFailures += 1;
+            nextProctorDelayMs = Math.min(PROCTOR_MAX_INTERVAL_MS, PROCTOR_MIN_INTERVAL_MS * (1 + proctorFailures));
+            if (proctorFailures <= 2) {
+                pushTimeline("proctor", "Vision analysis is backing off while the stream recovers.", "warn");
+            }
         } finally {
             proctorBusy = false;
+            if (interviewData.isInterviewActive && interviewData.cameraStream) {
+                proctorInterval = setTimeout(tick, nextProctorDelayMs);
+            }
         }
-    }, 2000);
+    };
+    proctorInterval = setTimeout(tick, 1200);
 }
 
 function updateProctorSignals(result) {
@@ -563,6 +758,14 @@ function updateProctorSignals(result) {
 
     const attentionNode = document.getElementById("attentionScore");
     if (attentionNode) attentionNode.textContent = attention ? Math.round(attention) : "-";
+    const rawAlerts = [...(result.raw_alerts || []), ...(result.alerts || [])];
+    if (rawAlerts.includes("low_light") || rawAlerts.includes("dim_light")) {
+        setCameraStatus("low-light", "Low light detected", "Adjust lighting for stronger face confidence.");
+    } else if (Number(result.face_count || 0) > 0) {
+        setCameraStatus("face", "Face detected", `Confidence ${Math.round(visibility || attention || 0)}%`);
+    } else {
+        setCameraStatus("detecting", "Detecting face", "No face detected yet. Center your face in the frame.");
+    }
 
     // Surface alerts in a calm, recruiter-friendly way.
     const alerts = Array.isArray(result.alerts) ? result.alerts : [];
@@ -572,7 +775,7 @@ function updateProctorSignals(result) {
         if (keyAlerts.length) {
             const now = Date.now();
             const msgKey = keyAlerts.slice(0, 2).join("|");
-            if ((now - lastProctorAlertAt) > 9000 || msgKey !== lastProctorAlertKey) {
+            if ((now - lastProctorAlertAt) > PROCTOR_ALERT_COOLDOWN_MS || msgKey !== lastProctorAlertKey) {
                 lastProctorAlertAt = now;
                 lastProctorAlertKey = msgKey;
                 showAlert(`Proctoring signal: ${keyAlerts.slice(0, 2).join(", ").replaceAll("_", " ")}`, "error");
@@ -582,6 +785,17 @@ function updateProctorSignals(result) {
     }
 
     renderCombinedSignals();
+
+    const severeAlerts = alerts.filter(a => ["multiple_faces", "no_face"].includes(String(a)));
+    if (result.throttled) {
+        nextProctorDelayMs = Math.min(PROCTOR_MAX_INTERVAL_MS, Number(result.retry_after_seconds || result.next_sample_seconds || 8) * 1000);
+    } else if (severeAlerts.length) {
+        nextProctorDelayMs = 6500;
+    } else if (visibility >= 70 && attention >= 70 && integrity >= 70) {
+        nextProctorDelayMs = Math.min(PROCTOR_MAX_INTERVAL_MS, Number(result.next_sample_seconds || 8.5) * 1000);
+    } else {
+        nextProctorDelayMs = Math.max(PROCTOR_MIN_INTERVAL_MS, Number(result.next_sample_seconds || 5) * 1000);
+    }
 }
 
 function renderCombinedSignals() {
@@ -602,11 +816,11 @@ function renderCombinedSignals() {
     const integrity = Number(proctor.integrity_score ?? 0) || 0;
 
     const commLine = transcriptStats.wpm
-        ? `Speech: ${transcriptStats.wpm} wpm · fillers: ${transcriptStats.filler_count}`
+        ? `Speech: ${transcriptStats.wpm} wpm - fillers: ${transcriptStats.filler_count}`
         : "Speech: waiting for transcript";
 
     const proctorLine = proctor && Object.keys(proctor).length
-        ? `Vision: vis ${Math.round(visibility)}% · engage ${Math.round(engagement)}% · integrity ${Math.round(integrity)}%`
+        ? `Vision: vis ${Math.round(visibility)}% - engage ${Math.round(engagement)}% - integrity ${Math.round(integrity)}%`
         : "Vision: start camera to enable face/behavior signals";
 
     const alertLine = proctorAlerts.length ? `Proctor alerts: ${proctorAlerts.slice(0, 3).join(", ")}` : "";
@@ -640,7 +854,8 @@ function startVoiceInput() {
             transcript = transcript.trim();
             document.getElementById("answerInput").value = transcript;
             updateLiveTranscript(transcript);
-            refreshLiveScore(transcript);
+            if (speechScoreTimer) clearTimeout(speechScoreTimer);
+            speechScoreTimer = setTimeout(() => scheduleLiveScore(transcript, 0), 900);
             updateSpeechStats(transcript);
         };
 
@@ -701,7 +916,7 @@ function updateSpeechStats(transcript) {
     const confidenceNode = document.getElementById("liveConfidence");
     if (confidenceNode) {
         const label = transcriptStats.wpm >= 90 && transcriptStats.wpm <= 170 ? "steady" : transcriptStats.wpm > 170 ? "fast" : "slow";
-        confidenceNode.textContent = `${label} · ${transcriptStats.wpm || 0} wpm`;
+        confidenceNode.textContent = `${label} - ${transcriptStats.wpm || 0} wpm`;
     }
 }
 
@@ -739,6 +954,7 @@ function updateUI() {
 
 function showAlert(message, type = "info") {
     const alertsContainer = document.getElementById("alertsContainer");
+    if (!alertsContainer) return;
     const alertDiv = document.createElement("div");
     alertDiv.className = "alert-item";
     alertDiv.textContent = message;
@@ -767,13 +983,15 @@ function showAlert(message, type = "info") {
 
 function showLoader(message = "Processing...") {
     const loader = document.getElementById("globalLoader");
+    if (!loader) return;
     const loaderCard = loader.querySelector(".loader-card");
-    loaderCard.textContent = message;
+    if (loaderCard) loaderCard.textContent = message;
     loader.style.display = "flex";
 }
 
 function hideLoader() {
-    document.getElementById("globalLoader").style.display = "none";
+    const loader = document.getElementById("globalLoader");
+    if (loader) loader.style.display = "none";
 }
 
 window.addEventListener("beforeunload", function () {

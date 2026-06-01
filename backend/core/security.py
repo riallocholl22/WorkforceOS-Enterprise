@@ -1,6 +1,7 @@
 import logging
 
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from backend.core.config import get_csp_policy, get_environment, is_docs_path
 from backend.services.auth_service import decode_token_payload
@@ -21,6 +22,14 @@ class AuthenticationContextMiddleware(BaseHTTPMiddleware):
             request.state.auth = decode_token_payload(token)
         elif request.cookies.get("access_token"):
             token_source = "cookie"
+            if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+                csrf_cookie = request.cookies.get("csrf_token")
+                csrf_header = request.headers.get("X-CSRF-Token")
+                if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+                    return JSONResponse(
+                        {"success": False, "error": {"message": "CSRF validation failed"}},
+                        status_code=403,
+                    )
             request.state.auth = decode_token_payload(request.cookies["access_token"])
 
         if token_source and request.state.auth is None:

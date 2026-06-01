@@ -533,8 +533,8 @@ def workforce_operating_system(organization_id: Optional[int], user_id: Optional
                 "performance": {
                     "dashboard_cache_ttl_seconds": 15,
                     "candidate_result_limit": 100,
-                    "ops_stream_poll_seconds": 1.6,
-                    "security_stream_poll_seconds": 1.4,
+                    "ops_stream_poll_seconds": 5.0,
+                    "security_stream_poll_seconds": 5.0,
                     "api_payload_strategy": "bounded lists, cached dashboard state, streaming copilot responses",
                 },
                 "recommendations": [

@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 
 from backend.db.database import Base, SessionLocal, engine
 from backend.models.enterprise import (
+    AuthAuditLog,
     EmailVerificationToken,
     Membership,
+    MfaChallenge,
     Organization,
     PasswordResetToken,
     RefreshToken,
@@ -38,6 +40,10 @@ class User(Base):
     refresh_token_version = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True, index=True)
     locked_reason = Column(String, nullable=True)
+    phone = Column(String, nullable=True, index=True)
+    phone_verified = Column(Boolean, default=False, nullable=False)
+    mfa_enabled = Column(Boolean, default=True, nullable=False)
+    failed_login_count = Column(Integer, default=0, nullable=False)
 
 
 JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
@@ -55,6 +61,7 @@ pwd_context = CryptContext(
     argon2__time_cost=int(os.getenv("ARGON2_TIME_COST", "3")),
     argon2__parallelism=int(os.getenv("ARGON2_PARALLELISM", "4")),
 )
+_TEST_MFA_OTP_CACHE: dict[str, dict] = {}
 
 
 class PasswordPolicyError(ValueError):
@@ -84,11 +91,30 @@ def ensure_auth_tables():
             "refresh_token_version": "INTEGER DEFAULT 0",
             "locked_until": "DATETIME",
             "locked_reason": "VARCHAR",
+            "phone": "VARCHAR",
+            "phone_verified": "BOOLEAN DEFAULT 0",
+            "mfa_enabled": "BOOLEAN DEFAULT 1",
+            "failed_login_count": "INTEGER DEFAULT 0",
         }
         with engine.begin() as connection:
             for column_name, ddl in additions.items():
                 if column_name not in existing:
                     connection.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {ddl}"))
+    inspector = inspect(engine)
+    if "email_verification_tokens" in inspector.get_table_names():
+        existing = {column["name"] for column in inspector.get_columns("email_verification_tokens")}
+        additions = {
+            "channel": "VARCHAR DEFAULT 'email'",
+            "destination": "VARCHAR",
+            "attempts": "INTEGER DEFAULT 0",
+            "max_attempts": "INTEGER DEFAULT 5",
+            "locked_until": "DATETIME",
+            "last_sent_at": "DATETIME",
+        }
+        with engine.begin() as connection:
+            for column_name, ddl in additions.items():
+                if column_name not in existing:
+                    connection.execute(text(f"ALTER TABLE email_verification_tokens ADD COLUMN {column_name} {ddl}"))
 
 
 def hash_password(password: str) -> str:
@@ -129,6 +155,119 @@ def _base64url_decode(value: str) -> bytes:
 
 def _hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _generate_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def mask_phone(phone: Optional[str]) -> Optional[str]:
+    if not phone:
+        return None
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) <= 4:
+        return "****"
+    return f"{'*' * max(0, len(digits) - 4)}{digits[-4:]}"
+
+
+def mask_email(email: str) -> str:
+    local, _, domain = (email or "").partition("@")
+    if not local or not domain:
+        return email
+    return f"{local[:2]}{'*' * max(2, len(local) - 2)}@{domain}"
+
+
+def mfa_test_mode_enabled() -> bool:
+    environment = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower()
+    if environment in {"production", "prod", "staging"}:
+        return False
+    if environment == "test":
+        return True
+    return os.getenv("E2E_TEST_MODE", "").lower() in {"1", "true", "yes", "on"}
+
+
+def _store_test_mfa_otp(challenge_token_hash: str, otp: str, expires_at: datetime, user_id: int) -> None:
+    if not mfa_test_mode_enabled():
+        return
+    now = datetime.utcnow()
+    expired_keys = [
+        key for key, value in _TEST_MFA_OTP_CACHE.items()
+        if value.get("expires_at") and value["expires_at"] < now
+    ]
+    for key in expired_keys:
+        _TEST_MFA_OTP_CACHE.pop(key, None)
+    _TEST_MFA_OTP_CACHE[challenge_token_hash] = {
+        "otp": otp,
+        "expires_at": expires_at,
+        "user_id": user_id,
+        "created_at": now,
+    }
+
+
+def get_test_mfa_otp(challenge_token: str) -> Optional[dict]:
+    if not mfa_test_mode_enabled():
+        return None
+    cached = _TEST_MFA_OTP_CACHE.get(_hash_token(challenge_token))
+    if not cached or cached["expires_at"] < datetime.utcnow():
+        return None
+    return {
+        "otp": cached["otp"],
+        "expires_at": cached["expires_at"].isoformat(),
+        "user_id": cached["user_id"],
+    }
+
+
+def log_auth_event(
+    event_type: str,
+    user: Optional[User] = None,
+    email: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    organization_id: Optional[int] = None,
+    details: Optional[dict] = None,
+) -> None:
+    ensure_auth_tables()
+    payload = details or {}
+    db: Session = SessionLocal()
+    try:
+        db.add(
+            AuthAuditLog(
+                event_type=event_type,
+                ip_address=ip_address,
+                user_agent=(user_agent or "")[:500] or None,
+                role=getattr(user, "role", None),
+                user_id=getattr(user, "id", None),
+                organization_id=organization_id if organization_id is not None else getattr(user, "organization_id", None),
+                details={**payload, "email": email or getattr(user, "username", None)},
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        from backend.services.enterprise_service import log_audit_event
+        from backend.services.security_ai.threat_service import monitor_event
+
+        audit_action = f"auth.{event_type}"
+        log_audit_event(
+            action=audit_action,
+            entity_type="auth",
+            entity_id=str(getattr(user, "id", None) or email or "anonymous"),
+            organization_id=organization_id if organization_id is not None else getattr(user, "organization_id", None),
+            user_id=getattr(user, "id", None),
+            details={**payload, "source_ip": ip_address, "user_agent": user_agent},
+        )
+        if event_type in {"login_failure", "otp_failure", "account_lockout", "suspicious_activity", "otp_abuse"}:
+            monitor_event(
+                "auth.lockout" if event_type == "account_lockout" else "auth.failed",
+                organization_id=organization_id if organization_id is not None else getattr(user, "organization_id", None),
+                user_id=getattr(user, "id", None),
+                source_ip=ip_address,
+                details={**payload, "auth_event": event_type, "email": email or getattr(user, "username", None)},
+            )
+    except Exception:
+        pass
 
 
 def _slugify(value: str) -> str:
@@ -355,9 +494,12 @@ def serialize_user(user: User, organization_id: Optional[int] = None, role: Opti
     return {
         "id": user.id,
         "email": user.username,
+        "phone": mask_phone(getattr(user, "phone", None)),
         "organization_id": organization_id if organization_id is not None else user.organization_id,
         "role": role or user.role or "recruiter",
         "email_verified": bool(user.email_verified),
+        "phone_verified": bool(getattr(user, "phone_verified", False)),
+        "mfa_enabled": bool(getattr(user, "mfa_enabled", True)),
         "memberships": memberships,
     }
 
@@ -372,6 +514,7 @@ def register_user_record(
     organization_name: Optional[str] = None,
     role: str = "company_admin",
     email_verified: bool = False,
+    phone: Optional[str] = None,
 ) -> Optional[User]:
     ensure_auth_tables()
     db: Session = SessionLocal()
@@ -386,6 +529,9 @@ def register_user_record(
             password=hash_password(password),
             role=role,
             email_verified=email_verified,
+            phone=phone,
+            phone_verified=False,
+            mfa_enabled=True,
         )
         db.add(user)
         db.flush()
@@ -613,27 +759,66 @@ def reset_password(raw_token: str, new_password: str) -> bool:
 
 
 def issue_email_verification(email: str) -> Optional[dict]:
+    return issue_account_verification(email=email, channel="email")
+
+
+def issue_account_verification(email: Optional[str] = None, phone: Optional[str] = None, channel: str = "email", enforce_cooldown: bool = False) -> Optional[dict]:
     ensure_auth_tables()
+    channel = "sms" if channel == "sms" else "email"
+    normalized_email = (email or "").strip().lower()
+    normalized_phone = (phone or "").strip() or None
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.username == email.lower()).first()
+        user = None
+        if normalized_email:
+            user = db.query(User).filter(User.username == normalized_email).first()
+        if not user and normalized_phone:
+            user = db.query(User).filter(User.phone == normalized_phone).first()
         if not user:
             return None
 
-        raw_token = secrets.token_urlsafe(32)
-        expires_at = datetime.utcnow() + timedelta(hours=JWT_VERIFICATION_EXPIRATION_HOURS)
+        if channel == "sms" and not getattr(user, "phone", None):
+            channel = "email"
+        destination = user.phone if channel == "sms" else user.username
+        now = datetime.utcnow()
+        if enforce_cooldown:
+            latest = db.query(EmailVerificationToken).filter(
+                EmailVerificationToken.user_id == user.id,
+                EmailVerificationToken.channel == channel,
+                EmailVerificationToken.used_at.is_(None),
+            ).order_by(EmailVerificationToken.created_at.desc()).first()
+            if latest and latest.last_sent_at and (now - latest.last_sent_at).total_seconds() < 60:
+                return {
+                    "cooldown_seconds": 60 - int((now - latest.last_sent_at).total_seconds()),
+                    "email": user.username,
+                    "phone": mask_phone(getattr(user, "phone", None)),
+                    "channel": channel,
+                }
+
+        raw_token = _generate_otp()
+        expires_at = now + timedelta(minutes=10)
         db.add(
             EmailVerificationToken(
                 user_id=user.id,
                 token_hash=_hash_token(raw_token),
+                channel=channel,
+                destination=destination,
                 expires_at=expires_at,
+                attempts=0,
+                max_attempts=5,
+                last_sent_at=now,
             )
         )
         db.commit()
+        log_auth_event("verification_code_sent", user=user, details={"channel": channel, "destination": mask_email(destination) if channel == "email" else mask_phone(destination)})
         return {
             "token": raw_token,
+            "otp": raw_token,
             "expires_at": expires_at.isoformat(),
             "email": user.username,
+            "phone": mask_phone(getattr(user, "phone", None)),
+            "channel": channel,
+            "masked_destination": mask_email(destination) if channel == "email" else mask_phone(destination),
         }
     finally:
         db.close()
@@ -657,6 +842,281 @@ def verify_email_token(raw_token: str) -> bool:
         row.used_at = datetime.utcnow()
         db.commit()
         return True
+    finally:
+        db.close()
+
+
+def verify_email_code(email: str, raw_token: str) -> dict:
+    return verify_account_verification_code(email=email, code=raw_token, channel="email")
+
+
+def verify_phone_code(phone: str, raw_token: str) -> dict:
+    return verify_account_verification_code(phone=phone, code=raw_token, channel="sms")
+
+
+def verify_account_verification_code(email: Optional[str] = None, phone: Optional[str] = None, code: str = "", channel: str = "email") -> dict:
+    ensure_auth_tables()
+    normalized_email = (email or "").strip().lower()
+    normalized_phone = (phone or "").strip()
+    code = (code or "").strip()
+    channel = "sms" if channel == "sms" else "email"
+    if not code:
+        return {"verified": False, "reason": "missing_code"}
+    db: Session = SessionLocal()
+    try:
+        user = None
+        if normalized_email:
+            user = db.query(User).filter(User.username == normalized_email).first()
+        if not user and normalized_phone:
+            user = db.query(User).filter(User.phone == normalized_phone).first()
+        if not user:
+            return {"verified": False, "reason": "email_not_found" if channel == "email" else "phone_not_found"}
+
+        row = db.query(EmailVerificationToken).filter(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.channel == channel,
+            EmailVerificationToken.token_hash == _hash_token(code),
+        ).first()
+        if not row:
+            latest = db.query(EmailVerificationToken).filter(
+                EmailVerificationToken.user_id == user.id,
+                EmailVerificationToken.channel == channel,
+                EmailVerificationToken.used_at.is_(None),
+            ).order_by(EmailVerificationToken.created_at.desc()).first()
+            if latest:
+                latest.attempts = int(latest.attempts or 0) + 1
+                if latest.attempts >= int(latest.max_attempts or 5):
+                    latest.locked_until = datetime.utcnow() + timedelta(minutes=10)
+                db.commit()
+                log_auth_event("verification_failed", user=user, details={"attempts": latest.attempts, "channel": channel, "reason": "invalid_code"})
+            return {"verified": False, "reason": "invalid_code"}
+        if row.used_at:
+            return {"verified": False, "reason": "invalid_code"}
+        now = datetime.utcnow()
+        if row.locked_until and row.locked_until > now:
+            return {"verified": False, "reason": "too_many_attempts"}
+        if row.expires_at < datetime.utcnow():
+            log_auth_event("verification_failed", user=user, details={"reason": "expired", "channel": channel})
+            return {"verified": False, "reason": "expired"}
+        if row.attempts >= row.max_attempts:
+            row.locked_until = now + timedelta(minutes=10)
+            db.commit()
+            log_auth_event("verification_failed", user=user, details={"reason": "too_many_attempts", "channel": channel})
+            return {"verified": False, "reason": "too_many_attempts"}
+
+        if channel == "sms":
+            user.phone_verified = True
+        else:
+            user.email_verified = True
+        row.used_at = datetime.utcnow()
+        db.commit()
+        log_auth_event("phone_verified" if channel == "sms" else "email_verified", user=user, details={"channel": channel})
+        return {"verified": True, "reason": "verified", "user": serialize_user(user)}
+    finally:
+        db.close()
+
+
+def record_failed_account_verification(email: Optional[str] = None, phone: Optional[str] = None, code: str = "", channel: str = "email") -> None:
+    ensure_auth_tables()
+    normalized_email = (email or "").strip().lower()
+    normalized_phone = (phone or "").strip()
+    db: Session = SessionLocal()
+    try:
+        user = None
+        if normalized_email:
+            user = db.query(User).filter(User.username == normalized_email).first()
+        if not user and normalized_phone:
+            user = db.query(User).filter(User.phone == normalized_phone).first()
+        if not user:
+            return
+        row = db.query(EmailVerificationToken).filter(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.channel == ("sms" if channel == "sms" else "email"),
+            EmailVerificationToken.token_hash == _hash_token((code or "").strip()),
+        ).first()
+        if not row or row.used_at:
+            return
+        row.attempts = int(row.attempts or 0) + 1
+        if row.attempts >= int(row.max_attempts or 5):
+            row.locked_until = datetime.utcnow() + timedelta(minutes=10)
+        db.commit()
+        log_auth_event("verification_failed", user=user, details={"attempts": row.attempts, "channel": channel})
+    finally:
+        db.close()
+
+
+def create_mfa_challenge(
+    user: User,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    delivery_channel: str = "email",
+) -> Optional[dict]:
+    ensure_auth_tables()
+    db: Session = SessionLocal()
+    try:
+        hydrated = db.query(User).filter(User.id == user.id).first()
+        if not hydrated:
+            return None
+
+        otp = _generate_otp()
+        challenge_token = secrets.token_urlsafe(32)
+        now = datetime.utcnow()
+        challenge = MfaChallenge(
+            user_id=hydrated.id,
+            email=hydrated.username,
+            phone=getattr(hydrated, "phone", None),
+            otp_hash=_hash_token(otp),
+            challenge_token_hash=_hash_token(challenge_token),
+            expires_at=now + timedelta(minutes=10),
+            attempts=0,
+            max_attempts=5,
+            ip_address=ip_address,
+            user_agent=(user_agent or "")[:500] or None,
+            last_sent_at=now,
+            delivery_channel=delivery_channel if delivery_channel in {"email", "sms"} else "email",
+        )
+        db.add(challenge)
+        db.commit()
+        db.refresh(challenge)
+        _store_test_mfa_otp(challenge.challenge_token_hash, otp, challenge.expires_at, hydrated.id)
+
+        try:
+            from backend.services.enterprise_service import create_notification
+
+            if not mfa_test_mode_enabled():
+                create_notification(
+                    user_id=hydrated.id,
+                    organization_id=hydrated.organization_id,
+                    kind="mfa_otp",
+                    subject="WorkforceOS Login Verification",
+                    message="Use this one-time code to complete login. It expires in 10 minutes. If you did not request it, change your password and contact your company admin.",
+                    metadata={"expires_at": challenge.expires_at.isoformat(), "channel": challenge.delivery_channel},
+                )
+        except Exception:
+            pass
+
+        log_auth_event(
+            "otp_sent",
+            user=hydrated,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            details={"challenge_id": challenge.id, "channel": challenge.delivery_channel},
+        )
+        return {
+            "challenge_token": challenge_token,
+            "expires_at": challenge.expires_at.isoformat(),
+            "delivery_channel": challenge.delivery_channel,
+            "masked_email": mask_email(hydrated.username),
+            "masked_phone": mask_phone(getattr(hydrated, "phone", None)),
+            "test_otp_available": mfa_test_mode_enabled(),
+        }
+    finally:
+        db.close()
+
+
+def verify_mfa_challenge(challenge_token: str, otp: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Optional[dict]:
+    ensure_auth_tables()
+    db: Session = SessionLocal()
+    try:
+        challenge = db.query(MfaChallenge).filter(
+            MfaChallenge.challenge_token_hash == _hash_token(challenge_token)
+        ).first()
+        now = datetime.utcnow()
+        if not challenge or challenge.consumed_at:
+            log_auth_event("otp_failure", ip_address=ip_address, user_agent=user_agent, details={"reason": "invalid_challenge"})
+            return None
+
+        user = db.query(User).filter(User.id == challenge.user_id).first()
+        if not user:
+            return None
+
+        if challenge.expires_at < now:
+            log_auth_event("otp_failure", user=user, ip_address=ip_address, user_agent=user_agent, details={"reason": "expired"})
+            return None
+
+        if challenge.attempts >= challenge.max_attempts:
+            user.locked_until = now + timedelta(minutes=15)
+            user.locked_reason = "mfa_attempt_limit"
+            db.commit()
+            log_auth_event("account_lockout", user=user, ip_address=ip_address, user_agent=user_agent, details={"reason": "mfa_attempt_limit"})
+            return None
+
+        if not hmac.compare_digest(challenge.otp_hash, _hash_token((otp or "").strip())):
+            challenge.attempts += 1
+            if challenge.attempts >= challenge.max_attempts:
+                user.locked_until = now + timedelta(minutes=15)
+                user.locked_reason = "mfa_attempt_limit"
+            db.commit()
+            log_auth_event("otp_failure", user=user, ip_address=ip_address, user_agent=user_agent, details={"attempts": challenge.attempts})
+            return None
+
+        challenge.consumed_at = now
+        user.failed_login_count = 0
+        db.commit()
+        db.refresh(user)
+        log_auth_event("otp_verified", user=user, ip_address=ip_address, user_agent=user_agent, details={"challenge_id": challenge.id})
+        return _token_bundle_for_user(user)
+    finally:
+        db.close()
+
+
+def resend_mfa_challenge(challenge_token: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Optional[dict]:
+    ensure_auth_tables()
+    db: Session = SessionLocal()
+    try:
+        challenge = db.query(MfaChallenge).filter(
+            MfaChallenge.challenge_token_hash == _hash_token(challenge_token)
+        ).first()
+        now = datetime.utcnow()
+        if not challenge or challenge.consumed_at or challenge.expires_at < now:
+            return None
+        if challenge.last_sent_at and (now - challenge.last_sent_at).total_seconds() < 60:
+            return {"cooldown_seconds": 60 - int((now - challenge.last_sent_at).total_seconds())}
+
+        otp = _generate_otp()
+        challenge.otp_hash = _hash_token(otp)
+        challenge.last_sent_at = now
+        challenge.expires_at = now + timedelta(minutes=10)
+        db.commit()
+        _store_test_mfa_otp(challenge.challenge_token_hash, otp, challenge.expires_at, challenge.user_id)
+        user = db.query(User).filter(User.id == challenge.user_id).first()
+        if user:
+            try:
+                from backend.services.enterprise_service import create_notification
+
+                if not mfa_test_mode_enabled():
+                    create_notification(
+                        user_id=user.id,
+                        organization_id=user.organization_id,
+                        kind="mfa_otp",
+                        subject="WorkforceOS Login Verification",
+                        message="Use this one-time code to complete login. It expires in 10 minutes. If you did not request it, contact your company admin.",
+                        metadata={"expires_at": challenge.expires_at.isoformat(), "channel": challenge.delivery_channel},
+                    )
+            except Exception:
+                pass
+            log_auth_event("otp_sent", user=user, ip_address=ip_address, user_agent=user_agent, details={"resend": True})
+        return {
+            "message": "A new verification code has been sent.",
+            "expires_at": challenge.expires_at.isoformat(),
+            "test_otp_available": mfa_test_mode_enabled(),
+        }
+    finally:
+        db.close()
+
+
+def set_user_mfa(user_id: int, enabled: bool) -> Optional[dict]:
+    ensure_auth_tables()
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return None
+        user.mfa_enabled = enabled
+        db.commit()
+        db.refresh(user)
+        log_auth_event("mfa_setup" if enabled else "mfa_disable", user=user)
+        return serialize_user(user)
     finally:
         db.close()
 
@@ -700,7 +1160,7 @@ def get_user_context_from_token(token: str) -> Optional[dict]:
 
         bootstrap_user_if_needed(user.username)
         user = get_user_by_id(user.id) or user
-        resolved_role = development_claim_role(user.role, payload.get("role"))
+        resolved_role = "applicant" if (user.role or "").lower() == "applicant" else development_claim_role(user.role, payload.get("role"))
     except Exception:
         resolved_role = payload.get("role") or user.role or "recruiter"
 

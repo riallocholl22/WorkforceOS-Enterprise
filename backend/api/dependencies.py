@@ -45,6 +45,7 @@ def get_current_user(
 
 
 def get_current_user_context(
+    request: Request,
     token: str = Depends(_raw_bearer_token),
 ) -> dict:
     context = get_user_context_from_token(token)
@@ -54,6 +55,28 @@ def get_current_user_context(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    role = str(context.get("role") or "").lower()
+    if role == "applicant":
+        path = getattr(request.url, "path", "")
+        applicant_allowed_prefixes = (
+            "/auth/me",
+            "/auth/logout",
+            "/auth/mfa/",
+            "/applicant",
+            "/interview",
+            "/resume",
+            "/parse-resume",
+            "/upload-resume",
+        )
+        if not path.startswith(applicant_allowed_prefixes):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Applicant accounts can access applicant and interview workflows only.",
+                    "code": "applicant_scope_restricted",
+                },
+            )
+
     return context
 
 

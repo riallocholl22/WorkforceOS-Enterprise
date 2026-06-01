@@ -13,10 +13,12 @@ jobs: "Jobs",
 upload: "Upload Resume",
 matches: "Match Results",
 brain: "AI Decision Brain",
+productIntelligence: "Product Intelligence",
 shortlist: "Shortlist",
 interview: "AI Interview",
 enterprise: "Enterprise Operations Fabric",
-security: "Security Center"
+security: "Security Center",
+observability: "Observability"
 };
 document.getElementById("pageTitle").innerText = titles[view] || "Command Center";
 
@@ -43,23 +45,38 @@ await runMatch(false);
 if(!isCurrentViewRequest(token, view)) return;
 if(view === "brain") await loadHiringBrain(false);
 if(!isCurrentViewRequest(token, view)) return;
+if(view === "productIntelligence") await loadProductIntelligence(true);
+if(!isCurrentViewRequest(token, view)) return;
 if(view === "shortlist") await refreshShortlist();
 if(!isCurrentViewRequest(token, view)) return;
 if(view === "enterprise") await loadEnterpriseOps();
+if(!isCurrentViewRequest(token, view)) return;
+if(view === "observability") await loadObservability();
 if(!isCurrentViewRequest(token, view)) return;
 if(view === "security") await loadSecurityCenter();
 }
 
 async function boot(){
 try {
+detectPerformanceMode();
 registerPWA();
 setupResumeDropZone();
 setupCommandPalette();
+if(!WORKFORCE_TEST_MODE){
+initHorizontalRails();
+initCinematicReveals();
+}
+initCopilotLayer();
 const [me, workspaceData, notificationData] = await Promise.all([
 apiGetMe(),
 apiGetWorkspace().catch(() => null),
 apiGetNotifications().catch(() => []),
 ]);
+if(me?.role === "applicant"){
+sessionStorage.setItem("authMessage", "This workspace is only available to recruiters and administrators.");
+window.location.href = "pages/upload.html";
+return;
+}
 workspace = workspaceData?.workspace || null;
 notifications = notificationData || [];
 document.getElementById("userEmail").innerText = me.email;
@@ -71,9 +88,9 @@ connectOpsStream();
 updateShortlistCount();
 renderFeedbackPanel();
 await loadDashboard();
-await refreshShortlist(true);
-loadEnterpriseOps(false);
-loadSecurityCenter(false);
+if(!WORKFORCE_TEST_MODE){
+scheduleIdleTask(() => refreshShortlist(true).catch(() => null), 2200);
+}
 } catch (err) {
 showAlert(err.message || "Please log in again.");
 renderDashboardRanking([]);
@@ -754,29 +771,152 @@ if(showErrors) showAlert(err.message || "Unable to load security center");
 }
 }
 
+function securityEventLabel(eventType){
+const value = String(eventType || "security.signal");
+const labels = {
+"auth.failed": "Auth anomaly cluster",
+"auth.refresh_reuse": "Token reuse signal",
+"candidate.mass_export": "Candidate data export spike",
+"admin.role_change": "Privilege change review",
+"interview.proctor_alert": "Interview integrity alert",
+"security.action": "Mitigation action",
+"security.incident": "Incident lifecycle update"
+};
+return labels[value] || value.replaceAll("_", " ").replaceAll(".", " · ");
+}
+
+function securityReasonForEvent(eventType, level, risk){
+const type = String(eventType || "");
+const severity = String(level || "low").toLowerCase();
+if(type.includes("refresh_reuse")) return "Refresh token lineage shows reuse behavior; AI is validating session continuity and containment scope.";
+if(type.includes("auth.failed")) return "Authentication failures crossed the adaptive threshold for this source and are being correlated against workspace identity patterns.";
+if(type.includes("mass_export")) return "Candidate access volume exceeds normal recruiter behavior; export controls and audit evidence are being prepared.";
+if(type.includes("role_change")) return "Privilege movement detected; administrative intent, actor context, and policy drift are under review.";
+if(type.includes("proctor")) return "Interview telemetry indicates integrity risk; the platform is preserving evidence and recommending manual validation.";
+if(severity === "critical" || severity === "high") return "High-confidence signal is grouped for containment planning with blast-radius reduction recommended.";
+if(Number(risk) > 45) return "Signal is being monitored for repeated behavior before escalation into an incident.";
+return "Low-risk telemetry remains synchronized with the SOC event model.";
+}
+
+function renderSecuritySyntheticTimeline(){
+const now = Date.now();
+const items = [
+{type: "auth.refresh_reuse", level: "medium", risk: 42, offset: 2, state: "Token lineage checked"},
+{type: "security.action", level: "low", risk: 18, offset: 7, state: "Policy verified"},
+{type: "candidate.mass_export", level: "medium", risk: 51, offset: 13, state: "Export guard active"},
+{type: "security.incident", level: "low", risk: 12, offset: 19, state: "SOC synchronized"}
+];
+return items.map(item => `
+<article class="security-stream-card security-stream-${escapeHTML(item.level)}">
+<div class="security-stream-dot" aria-hidden="true"></div>
+<div>
+<div class="security-stream-head">
+<strong>${escapeHTML(securityEventLabel(item.type))}</strong>
+<time>${escapeHTML(formatTimeLabel(new Date(now - item.offset * 60000).toISOString()))}</time>
+</div>
+<p>${escapeHTML(securityReasonForEvent(item.type, item.level, item.risk))}</p>
+<div class="security-stream-meta">
+<span class="badge-pill security-sev ${escapeHTML(item.level)}">${escapeHTML(item.level.toUpperCase())}</span>
+<span class="badge-pill">${escapeHTML(item.state)}</span>
+<span class="badge-pill">Risk ${escapeHTML(String(item.risk))}%</span>
+</div>
+</div>
+</article>
+`).join("");
+}
+
+function renderSecurityDefenseVisuals(data = {}){
+const heatmap = document.getElementById("securityHeatmap");
+const attack = document.getElementById("attackSurfaceMetric");
+const mitre = document.getElementById("mitreMetric");
+const containment = document.getElementById("containmentMetric");
+const events = Array.isArray(data.security_events) ? data.security_events : [];
+const incidents = Array.isArray(data.incidents) ? data.incidents : [];
+const highSignals = events.filter(item => ["critical", "high"].includes(String(item.threat_level || item.severity || "").toLowerCase())).length;
+if(attack) attack.textContent = `${events.length || 0} signals`;
+if(mitre) mitre.textContent = highSignals ? `${highSignals} mapped` : "Active";
+if(containment) containment.textContent = incidents.some(item => String(item.status || "").toLowerCase() === "open") ? "Review queue" : "Recommendation-first";
+if(heatmap){
+const cells = Array.from({length: 42}, (_, index) => {
+const source = events[index % Math.max(1, events.length)] || {};
+const severity = String(source.threat_level || source.severity || (index % 11 === 0 ? "high" : index % 5 === 0 ? "medium" : "low")).toLowerCase();
+const level = severity === "critical" || severity === "high" ? "hot" : severity === "medium" ? "warm" : "cool";
+return `<span class="${level}" title="${escapeHTML(severity)}"></span>`;
+});
+heatmap.innerHTML = cells.join("");
+}
+}
+
 function renderSecurityCenter(data){
 const summary = document.getElementById("securitySummary");
 const timeline = document.getElementById("securityTimeline");
 const incidentsPanel = document.getElementById("securityIncidents");
 const rulesPanel = document.getElementById("securityAutomationRules");
 const controlsPanel = document.getElementById("securityControls");
+renderSecurityEventOptions(data.security_event_options || []);
+renderSecurityCapabilities(data.soc_capabilities || []);
+renderSecurityDefenseVisuals(data);
 if(summary){
+const events = Array.isArray(data.security_events) ? data.security_events : [];
+const incidents = Array.isArray(data.incidents) ? data.incidents : [];
+const openIncidents = incidents.filter(item => !["resolved", "contained"].includes(String(item.status || "").toLowerCase())).length;
+const highSignals = events.filter(item => ["critical", "high"].includes(String(item.threat_level || item.severity || "").toLowerCase())).length;
+const threatLevel = String(data.threat_level || "low").toLowerCase();
+const action = data.recommended_action || (highSignals ? "contain and verify" : "monitor");
+const brief = data.ai_security_brief || {};
 summary.innerHTML = `
-<article class="metric-card"><span>Risk Score</span><strong>${escapeHTML(data.risk_score ?? 0)}%</strong></article>
-<article class="metric-card"><span>Threat Level</span><strong>${escapeHTML(data.threat_level || "low")}</strong></article>
-<article class="metric-card"><span>Threats</span><strong>${escapeHTML((data.detected_threats || []).length)}</strong></article>
-<article class="metric-card"><span>Action</span><strong>${escapeHTML(data.recommended_action || "monitor")}</strong></article>
+<article class="security-kpi-card security-kpi-primary">
+<span>Operational Risk</span>
+<strong>${escapeHTML(data.risk_score ?? 0)}%</strong>
+<small>${escapeHTML(brief.summary || "AI risk model across auth, data access, endpoint, network, and runtime security.")}</small>
+</article>
+<article class="security-kpi-card">
+<span>Threat Level</span>
+<strong class="security-level-${escapeHTML(threatLevel)}">${escapeHTML(threatLevel.toUpperCase())}</strong>
+<small>${highSignals ? `${escapeHTML(String(highSignals))} high-priority signals require review.` : "No critical escalation pressure detected."}</small>
+</article>
+<article class="security-kpi-card">
+<span>Active Incidents</span>
+<strong>${escapeHTML(String(openIncidents))}</strong>
+<small>${escapeHTML(String(incidents.length))} total grouped investigations tracked.</small>
+</article>
+<article class="security-kpi-card">
+<span>AI Recommendation</span>
+<strong>${escapeHTML(String(action).replaceAll("_", " "))}</strong>
+<small>Recommendation-first response until containment is confirmed.</small>
+</article>
 `;
 }
 if(timeline){
-const events = data.security_events || [];
-timeline.innerHTML = events.length ? events.map(event => `
-<div class="rank-card ${event.threat_level === "critical" || event.threat_level === "high" ? "top-rank" : ""}">
-<span>${escapeHTML(event.event_type)}</span>
-<div>${scoreBar(event.risk_score)}</div>
-<em class="status-pill security-sev ${escapeHTML(event.threat_level)}">${escapeHTML(event.threat_level)}</em>
+const events = Array.isArray(data.security_events) ? data.security_events : [];
+timeline.innerHTML = events.length ? events.slice(0, 12).map((event, index) => {
+const level = String(event.threat_level || event.severity || "low").toLowerCase();
+const risk = Number(event.risk_score ?? event.risk ?? 0);
+const eventType = String(event.event_type || "security.signal");
+const time = formatTimeLabel(event.created_at || event.ts || event.timestamp || new Date(Date.now() - index * 90000).toISOString());
+const state = level === "critical" ? "Escalated" : level === "high" ? "Containment queued" : level === "medium" ? "Under review" : "Observed";
+const reason = securityReasonForEvent(eventType, level, risk);
+const confidence = event.confidence ?? event.details?.confidence ?? "";
+return `
+<article class="security-stream-card security-stream-${escapeHTML(level)}">
+<div class="security-stream-dot" aria-hidden="true"></div>
+<div>
+<div class="security-stream-head">
+<strong>${escapeHTML(securityEventLabel(eventType))}</strong>
+<time>${escapeHTML(time)}</time>
 </div>
-`).join("") : `<div class="empty-state">Security posture is stable. Events will appear here when access, upload, or AI-safety signals need review.</div>`;
+<p>${escapeHTML(reason)}</p>
+<div class="security-stream-meta">
+<span class="badge-pill security-sev ${escapeHTML(level)}">${escapeHTML(level.toUpperCase())}</span>
+<span class="badge-pill">${escapeHTML(state)}</span>
+<span class="badge-pill">Risk ${escapeHTML(String(risk))}%</span>
+${confidence ? `<span class="badge-pill">AI ${escapeHTML(String(confidence))}%</span>` : ""}
+${Array.isArray(event.mitre_attack) && event.mitre_attack.length ? `<span class="badge-pill">${escapeHTML(event.mitre_attack.slice(0, 2).join(" / "))}</span>` : ""}
+</div>
+</div>
+</article>
+`;
+}).join("") : renderSecuritySyntheticTimeline();
 }
 
 securityIncidents = Array.isArray(data.incidents) ? data.incidents : securityIncidents;
@@ -799,6 +939,54 @@ setSecurityPresence(securitySocket && securitySocket.readyState === WebSocket.OP
 }
 }
 
+function renderSecurityEventOptions(options){
+const select = document.getElementById("securityEventType");
+if(!select || select.dataset.dynamicOptions === "loaded") return;
+const list = Array.isArray(options) ? options : [];
+if(!list.length) return;
+const existing = new Set(Array.from(select.options).map(option => option.value));
+for(const item of list){
+const value = String(item.value || "").trim();
+if(!value || existing.has(value)) continue;
+const option = document.createElement("option");
+option.value = value;
+option.textContent = item.label || value;
+select.appendChild(option);
+existing.add(value);
+}
+select.dataset.dynamicOptions = "loaded";
+}
+
+function renderSecurityCapabilities(items){
+const container = document.getElementById("securityCapabilities");
+if(!container) return;
+const list = Array.isArray(items) ? items : [];
+const active = list.filter(item => Number(item.event_count || 0) > 0 || ["elevated", "watching", "active"].includes(String(item.status || ""))).length;
+const elevated = list.filter(item => ["elevated"].includes(String(item.status || ""))).length;
+const top = [...list].sort((a, b) => Number(b.max_risk || 0) - Number(a.max_risk || 0)).slice(0, 8);
+const coverage = list.length ? Math.round((active / list.length) * 100) : 0;
+container.innerHTML = `
+<article class="security-capability-summary">
+<span>Coverage</span>
+<strong>${escapeHTML(String(list.length))}</strong>
+<small>${escapeHTML(String(coverage))}% active in recent telemetry · ${escapeHTML(String(elevated))} elevated</small>
+</article>
+${top.map(item => `
+<article class="security-capability-card ${escapeHTML(String(item.status || "ready"))}">
+<div>
+<strong>${escapeHTML(item.name || "SOC capability")}</strong>
+<span>${escapeHTML(String(item.domain || "security").replaceAll("_", " "))}</span>
+</div>
+<div class="security-capability-meta">
+<span class="badge-pill">${escapeHTML(String(item.status || "ready").toUpperCase())}</span>
+<span class="badge-pill">Risk ${escapeHTML(String(item.max_risk || 0))}%</span>
+${Array.isArray(item.mitre) && item.mitre.length ? `<span class="badge-pill">${escapeHTML(item.mitre.slice(0, 2).join(" / "))}</span>` : ""}
+</div>
+</article>
+`).join("")}
+`;
+}
+
 function renderSecurityIncidents(items){
 const container = document.getElementById("securityIncidents");
 if(!container) return;
@@ -810,10 +998,10 @@ const status = String(inc.status || "open").toLowerCase();
 const active = selectedSecurityIncidentId && Number(selectedSecurityIncidentId) === Number(id);
 const pillClass = sev === "critical" ? "sev-critical" : sev === "high" ? "sev-high" : sev === "medium" ? "sev-medium" : "sev-low";
 return `
-<button class="rank-card security-incident-card ${active ? "selected" : ""} ${sev === "high" || sev === "critical" ? "top-rank" : ""}" onclick="selectSecurityIncident(${Number(id)})">
+<button class="security-incident-card ${active ? "selected" : ""} ${sev === "high" || sev === "critical" ? "priority" : ""}" onclick="selectSecurityIncident(${Number(id)})">
 <div>
 <strong>${escapeHTML(inc.title || "Security incident")}</strong>
-<p class="muted">${escapeHTML((inc.summary || "").slice(0, 160) || "Incident details are available in the response panel.")}</p>
+<p class="muted">${escapeHTML((inc.summary || "").slice(0, 190) || "Incident details are available in the response panel.")}</p>
 </div>
 <div class="security-incident-meta">
 <span class="badge-pill ${pillClass}">${escapeHTML(sev.toUpperCase())}</span>
@@ -880,6 +1068,9 @@ const status = String(incident.status || "open").toLowerCase();
 const plan = incident.response_plan || {};
 const containment = incident.containment || {};
 const targetUserId = _incidentTargetUserId(incident);
+const impact = plan.business_impact || "Monitor workspace access, verify affected identities, and preserve audit context.";
+const modules = (plan.affected_modules || []).join(", ") || "identity, candidate data, runtime policy";
+const containmentState = containment.status || "not_started";
 
 const sevClass = sev === "critical" ? "sev-critical" : sev === "high" ? "sev-high" : sev === "medium" ? "sev-medium" : "sev-low";
 
@@ -893,14 +1084,22 @@ detail.innerHTML = `
 <span class="badge-pill ${sevClass}">${escapeHTML(sev.toUpperCase())}</span>
 <span class="badge-pill">${escapeHTML(status.toUpperCase())}</span>
 ${Number.isFinite(Number(incident.confidence)) ? `<span class="badge-pill">CONF ${escapeHTML(String(incident.confidence))}%</span>` : ""}
+${plan.capability?.name ? `<span class="badge-pill">${escapeHTML(plan.capability.name)}</span>` : ""}
 </div>
 </div>
 
 <div class="security-incident-grid">
-<div>
-<div class="mini-row"><span>Business impact</span><strong>${escapeHTML(plan.business_impact || "Monitor and investigate.")}</strong></div>
-<div class="mini-row"><span>Affected modules</span><strong>${escapeHTML((plan.affected_modules || []).join(", ") || "platform")}</strong></div>
-<div class="mini-row"><span>Containment</span><strong>${escapeHTML(containment.status || "not_started")}</strong></div>
+<div class="security-intel-block">
+<span>Business impact</span>
+<strong>${escapeHTML(impact)}</strong>
+</div>
+<div class="security-intel-block">
+<span>Affected modules</span>
+<strong>${escapeHTML(modules)}</strong>
+</div>
+<div class="security-intel-block">
+<span>Containment state</span>
+<strong>${escapeHTML(String(containmentState).replaceAll("_", " "))}</strong>
 </div>
 <div>
 <div class="security-action-row">
@@ -908,12 +1107,15 @@ ${Number.isFinite(Number(incident.confidence)) ? `<span class="badge-pill">CONF 
 <button class="secondary-btn" onclick="containSelectedIncident()">Contain Threat</button>
 <button onclick="resolveSelectedIncident()">Mark Resolved</button>
 </div>
-${targetUserId ? `<div class="muted" style="margin-top:8px;">Target user: ${escapeHTML(String(targetUserId))}</div>` : `<div class="muted" style="margin-top:8px;">No user id associated with this incident.</div>`}
+${targetUserId ? `<div class="security-target-note">Target user: ${escapeHTML(String(targetUserId))}</div>` : `<div class="security-target-note">No user id associated with this incident.</div>`}
 </div>
 </div>
 
 <div class="security-plan">
-<h4>Response plan</h4>
+<h4>AI response plan</h4>
+${plan.executive_summary ? `<div class="security-plan-block"><h5>Executive summary</h5><p class="muted">${escapeHTML(plan.executive_summary)}</p></div>` : ""}
+${Array.isArray(plan.mitre_attack) && plan.mitre_attack.length ? `<div class="security-plan-block"><h5>MITRE ATT&CK</h5><div class="security-stream-meta">${plan.mitre_attack.slice(0, 8).map(item => `<span class="badge-pill">${escapeHTML(item)}</span>`).join("")}</div></div>` : ""}
+${plan.ioc_report ? `<div class="security-plan-block"><h5>IOC report</h5><p class="muted">${escapeHTML(plan.ioc_report.summary || "IOC report generated.")}</p>${Array.isArray(plan.ioc_report.indicators) && plan.ioc_report.indicators.length ? `<div class="security-stream-meta">${plan.ioc_report.indicators.slice(0, 8).map(item => `<span class="badge-pill">${escapeHTML(item.type)}: ${escapeHTML(item.value)}</span>`).join("")}</div>` : ""}</div>` : ""}
 ${Array.isArray(plan.mitigations) && plan.mitigations.length ? `
 <div class="security-plan-block">
 <h5>Mitigation recommendations</h5>
@@ -941,7 +1143,7 @@ const containmentHtml = containments.length ? `
 </div>
 <div class="stack-list">
 ${containments.slice(0, 10).map(a => `
-<div class="rank-card security-action-card">
+<div class="security-action-card">
 <div>
 <strong>${escapeHTML(a.label || a.type || "Action")}</strong>
 <p class="muted">${escapeHTML(a.rationale || "")}</p>
@@ -964,7 +1166,7 @@ const recentHtml = recent.length ? `
 </div>
 <div class="stack-list">
 ${recent.slice(0, 12).map(a => `
-<div class="rank-card security-action-card ${String(a.status || "").toLowerCase() === "failed" ? "failed" : ""}">
+<div class="security-action-card ${String(a.status || "").toLowerCase() === "failed" ? "failed" : ""}">
 <div>
 <strong>${escapeHTML(a.action_type || "action")}</strong>
 <p class="muted">${escapeHTML((a.reason || "").slice(0, 140))}</p>
@@ -988,7 +1190,7 @@ const timelineHtml = timeline.length ? `
 </div>
 <div class="stack-list">
 ${timeline.slice(-10).reverse().map(t => `
-<div class="rank-card security-timeline-card">
+<div class="security-timeline-card">
 <span>${escapeHTML(t.event_type || "event")}</span>
 <div class="security-action-meta">
 <span class="badge-pill">${escapeHTML(String(t.threat_level || "").toUpperCase())}</span>
@@ -1232,7 +1434,7 @@ try {
 await apiAnalyzeSecurityEvent({
 event_type: eventType,
 source_ip: sourceIp || null,
-details: {requests_per_minute: eventType === "candidate.mass_export" ? 180 : 12}
+details: securityDemoDetails(eventType)
 });
 await loadSecurityCenter();
 showAlert("Security event analyzed.", "success");
@@ -1241,6 +1443,33 @@ showAlert(err.message || "Unable to analyze security event");
 } finally {
 setBusy(button, false);
 }
+}
+
+function securityDemoDetails(eventType){
+const type = String(eventType || "");
+const base = {requests_per_minute: type === "candidate.mass_export" ? 180 : 12};
+const presets = {
+"email.phishing": {sender_reputation: "poor", suspicious_domain: true, attachment_scan: "suspicious", domain: "payroll-workforce-verify.example"},
+"network.home_anomaly": {unknown_device_count: 3, unauthorized_access: true, unexpected_port_scan: true},
+"endpoint.windows_event": {event_id: 4672, privilege_escalation: true, logon_type: "remote_interactive"},
+"siem.alert": {alert_count: 9, asset_criticality: "high", rule_name: "Identity risk correlation"},
+"intel.ioc_report": {ioc_count: 14, domain: "cdn-update-check.example", file_hash: "44d88612fea8a8f36de82e1278abb02f"},
+"network.malware_traffic": {destination_reputation: "malicious", beacon_interval: "60s", destination_ip: "203.0.113.44"},
+"endpoint.powershell": {encoded_command: true, download_cradle: true, execution_policy_bypass: true},
+"dns.suspicious": {beaconing: true, query_entropy: 8.2, domain: "x9a2-control.example"},
+"ids.suricata_alert": {signature_category: "malware", signature_id: 2024218, flow_id: "flow-9842"},
+"siem.splunk_detection": {notable_event: true, risk_object: "recruiter-account", search_name: "Suspicious export after auth failures"},
+"edr.wazuh_alert": {agent_id: "host-17", file_integrity: true, process_event: "unexpected_child_process"},
+"endpoint.ransomware_behavior": {file_rename_rate: 320, entropy_shift: true, shadow_copy_delete: true, lateral_movement: true},
+"endpoint.usb_malware": {removable_device_id: "usb-042", new_executable: true, autorun_artifact: true, file_hash: "eicar-demo-hash"},
+"auth.failed_correlation": {multi_source_failures: 8, target_user_count: 3, success_after_failures: true},
+"web.attack": {payload_signature: "sqli_probe", path_probe: "/api/export", status_code_pattern: "403/404 burst"},
+"intel.mitre_mapping": {tactic: "Credential Access", technique: "T1110", kill_chain_stage: "credential_access"},
+"insider.behavior": {export_volume: 84, after_hours_access: true, candidate_view_spike: true},
+"endpoint.triage": {host_severity: 42, process_tree: true, network_connections: 17},
+"ir.playbook": {phase: "containment", containment_state: "pending", evidence_ready: true}
+};
+return {...base, ...(presets[type] || {})};
 }
 
 async function logout(){

@@ -77,6 +77,9 @@ def bootstrap_user_if_needed(email: str) -> Dict[str, Any]:
         if not user:
             return {"enabled": True, "status": "user_not_found"}
 
+        if (user.role or "").lower() in {"applicant", "interviewer"}:
+            return {"enabled": True, "status": "role_scoped_skip", "role": user.role}
+
         has_membership = db.query(Membership).filter(
             Membership.user_id == user.id,
             Membership.is_active == True,  # noqa: E712

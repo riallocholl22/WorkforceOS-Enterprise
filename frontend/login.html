@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Login - AI Recruit</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="auth-body">
@@ -51,6 +52,14 @@
                 </div>
 
                 <form id="authForm" novalidate>
+                    <div id="loginAccountFields" class="auth-extra">
+                        <label class="field-label" for="loginAccountType">Login type</label>
+                        <select id="loginAccountType" name="loginAccountType">
+                            <option value="admin_recruiter">Admin / Recruiter Login</option>
+                            <option value="applicant">Applicant Login</option>
+                        </select>
+                    </div>
+
                     <label class="field-label" for="email">Email address</label>
                     <input id="email" name="email" type="email" autocomplete="email" placeholder="you@company.com" required>
                     <p class="field-hint" id="emailHint"></p>
@@ -63,16 +72,32 @@
                     <p class="field-hint" id="passwordHint"></p>
 
                     <div id="registerFields" class="auth-extra hidden">
+                        <label class="field-label" for="accountRole">Account type</label>
+                        <select id="accountRole" name="accountRole">
+                            <option value="recruiter">Recruiter</option>
+                            <option value="applicant">Applicant</option>
+                            <option value="interviewer">Interviewer</option>
+                        </select>
+
                         <label class="field-label" for="organizationName">Organization name</label>
                         <input id="organizationName" name="organizationName" autocomplete="organization" placeholder="Acme Talent">
+
+                        <label class="field-label" for="phone">Phone number</label>
+                        <input id="phone" name="phone" autocomplete="tel" placeholder="+254712345678">
                     </div>
 
                     <div id="resetFields" class="auth-extra hidden">
-                        <label class="field-label" for="resetToken">Reset or verification token</label>
-                        <input id="resetToken" name="resetToken" autocomplete="one-time-code" placeholder="Paste secure token">
+                        <label class="field-label" for="resetToken">Reset token or verification code</label>
+                        <input id="resetToken" name="resetToken" autocomplete="one-time-code" placeholder="Paste secure token or 6-digit code">
 
                         <label class="field-label" for="newPassword">New password</label>
                         <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" placeholder="Minimum 8 characters">
+                    </div>
+
+                    <div id="mfaFields" class="auth-extra hidden">
+                        <label class="field-label" for="mfaCode">Verification code</label>
+                        <input id="mfaCode" name="mfaCode" autocomplete="one-time-code" inputmode="numeric" maxlength="6" placeholder="6-digit code">
+                        <p class="field-hint visible" id="mfaHint"></p>
                     </div>
 
                     <div class="auth-row">
@@ -100,6 +125,7 @@
                     <button class="secondary-btn" id="sendVerificationBtn" type="button">Send Verification</button>
                     <button class="secondary-btn" id="verifyEmailBtn" type="button">Verify Email</button>
                     <button class="secondary-btn" id="resetPasswordBtn" type="button">Reset Password</button>
+                    <button class="secondary-btn hidden" id="resendMfaBtn" type="button">Resend OTP</button>
                 </div>
 
                 <div id="loginStatus" class="auth-notice" role="status" aria-live="polite"></div>
@@ -109,12 +135,16 @@
 
     <script src="js/api.js"></script>
     <script>
-    const state = { mode: "login", loading: false };
+    const state = { mode: "login", loading: false, challengeToken: "", mfaExpiresAt: null, countdownTimer: null, verificationChannel: "email" };
     const form = document.getElementById("authForm");
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
     const newPasswordInput = document.getElementById("newPassword");
     const organizationInput = document.getElementById("organizationName");
+    const accountRoleInput = document.getElementById("accountRole");
+    const loginAccountTypeInput = document.getElementById("loginAccountType");
+    const phoneInput = document.getElementById("phone");
+    const mfaInput = document.getElementById("mfaCode");
     const resetTokenInput = document.getElementById("resetToken");
     const rememberInput = document.getElementById("rememberMe");
     const statusEl = document.getElementById("loginStatus");
@@ -137,8 +167,8 @@
         primaryAction.classList.toggle("loading", isLoading);
         if (buttonLabel) {
             buttonLabel.textContent = isLoading
-                ? (labelOverride || (state.mode === "register" ? "Creating workspace..." : state.mode === "reset" ? "Securing recovery..." : "Verifying..."))
-                : (state.mode === "register" ? "Create Workspace" : state.mode === "reset" ? "Send Recovery Email" : "Secure Login");
+                ? (labelOverride || (state.mode === "mfa" ? "Checking code..." : state.mode === "verify" ? "Verifying email..." : state.mode === "register" ? "Creating account..." : state.mode === "reset" ? "Securing recovery..." : "Verifying..."))
+                : (state.mode === "mfa" ? "Verify OTP" : state.mode === "verify" ? "Verify Email" : state.mode === "register" ? "Create Account" : state.mode === "reset" ? "Send Recovery Email" : "Continue to MFA");
         }
         document.querySelectorAll(".auth-card button, .auth-card input").forEach((node) => {
             if (node !== primaryAction) node.disabled = isLoading;
@@ -149,6 +179,10 @@
         return emailInput.value.trim().toLowerCase();
     }
 
+    function getLoginAccountType() {
+        return loginAccountTypeInput.value === "applicant" ? "applicant" : "admin_recruiter";
+    }
+
     function validateEmail(email) {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     }
@@ -157,7 +191,17 @@
         if (!password) return "Password is required";
         if (strict && password.length < 8) return "Password must be at least 8 characters";
         if (strict && (!/[a-z]/i.test(password) || !/\d/.test(password))) return "Password must include letters and numbers";
+        if (strict && !/[A-Z]/.test(password)) return "Password should include an uppercase letter";
         return "";
+    }
+
+    function passwordStrength(password) {
+        let score = 0;
+        if (password.length >= 8) score++;
+        if (/[A-Z]/.test(password)) score++;
+        if (/\d/.test(password)) score++;
+        if (/[^A-Za-z0-9]/.test(password)) score++;
+        return ["", "Weak", "Fair", "Good", "Strong"][score] || "Weak";
     }
 
     function setFieldError(input, hint, message = "") {
@@ -170,7 +214,9 @@
         const email = getEmail();
         const password = passwordInput.value;
         setFieldError(emailInput, document.getElementById("emailHint"), email && !validateEmail(email) ? "Use a valid work email, for example you@company.com." : "");
-        setFieldError(passwordInput, document.getElementById("passwordHint"), password ? validatePassword(password, state.mode === "register") : "");
+        const passwordError = password ? validatePassword(password, state.mode === "register") : "";
+        const strength = state.mode === "register" && password && !passwordError ? `Strength: ${passwordStrength(password)}` : passwordError;
+        setFieldError(passwordInput, document.getElementById("passwordHint"), strength);
     }
 
     function _setPresence(dot, textEl, stateName, message) {
@@ -217,7 +263,22 @@
             return "We couldn’t verify those credentials. Please review your email and password.";
         }
         if (lower.includes("email not verified") || lower.includes("verify your email")) {
-            return "Your email isn’t verified yet. Tap “Send Verification”, then paste the token to complete access.";
+            return "Your account is not verified yet. Verify your email or phone to continue.";
+        }
+        if (lower.includes("account_not_verified") || lower.includes("account is not verified")) {
+            return "Your account is not verified yet. Verify your email or phone to continue.";
+        }
+        if (lower.includes("missing verification code") || lower.includes("missing_code")) {
+            return "Missing verification code.";
+        }
+        if (lower.includes("invalid verification code") || lower.includes("invalid_code")) {
+            return "Invalid verification code.";
+        }
+        if (lower.includes("email not found") || lower.includes("email_not_found")) {
+            return "Email not found.";
+        }
+        if (lower.includes("verification expired") || lower.includes("verification_expired") || lower.includes('"code":"expired"')) {
+            return "Verification expired. Request a new code.";
         }
         if (lower.includes("rate limit") || lower.includes("too many")) {
             return "We paused sign-in briefly for security. Wait a moment, then try again.";
@@ -232,16 +293,52 @@
         state.mode = mode;
         const isRegister = mode === "register";
         const isReset = mode === "reset";
+        const isMfa = mode === "mfa";
+        const isVerify = mode === "verify";
+        const isLogin = mode === "login";
         document.getElementById("registerFields").classList.toggle("hidden", !isRegister);
-        document.getElementById("resetFields").classList.toggle("hidden", !isReset);
-        document.getElementById("tokenActions").classList.toggle("hidden", !isReset);
-        document.getElementById("authTitle").textContent = isRegister ? "Create your workspace" : isReset ? "Recover access" : "Welcome back";
-        document.getElementById("authSubtitle").textContent = isRegister ? "Set up a secure workspace for your recruiting team." : isReset ? "Recover access calmly. We’ll guide you through it." : "Sign in with your work email to continue.";
-        document.getElementById("authModeLabel").textContent = isRegister ? "Enterprise registration" : isReset ? "Account recovery" : "Secure workspace login";
-        document.querySelector(".button-label").textContent = isRegister ? "Create Workspace" : isReset ? "Send Recovery Email" : "Secure Login";
-        document.getElementById("secondaryModeBtn").textContent = isRegister ? "Already have an account? Sign in" : "Don't have an account? Register";
+        document.getElementById("resetFields").classList.toggle("hidden", !(isReset || isVerify));
+        document.getElementById("mfaFields").classList.toggle("hidden", !isMfa);
+        document.getElementById("loginAccountFields").classList.toggle("hidden", !isLogin);
+        document.getElementById("tokenActions").classList.toggle("hidden", !(isReset || isVerify || isMfa));
+        document.getElementById("sendVerificationBtn").classList.toggle("hidden", !isVerify);
+        document.getElementById("verifyEmailBtn").classList.toggle("hidden", !isVerify);
+        document.getElementById("resetPasswordBtn").classList.toggle("hidden", !isReset);
+        document.getElementById("resendMfaBtn").classList.toggle("hidden", !isMfa);
+        document.querySelector("label[for='resetToken']").textContent = isVerify ? "Email verification code" : "Reset token";
+        resetTokenInput.placeholder = isVerify ? "Enter the 6-digit email code" : "Paste secure reset token";
+        newPasswordInput.classList.toggle("hidden", !isReset);
+        document.querySelector("label[for='newPassword']").classList.toggle("hidden", !isReset);
+        const loginLabel = getLoginAccountType() === "applicant" ? "Applicant Login" : "Admin / Recruiter Login";
+        document.getElementById("authTitle").textContent = isRegister ? "Create your account" : isReset ? "Recover access" : isVerify ? "Verify your email" : isMfa ? "Verify your sign-in" : loginLabel;
+        document.getElementById("authSubtitle").textContent = isRegister ? "Register first, then verify your email before signing in." : isReset ? "Recover access calmly. We’ll guide you through it." : isVerify ? "Use the email verification code from registration. This is not the MFA sign-in code." : isMfa ? "Enter the one-time MFA code sent after password login." : "Choose your account type, then continue to MFA.";
+        document.getElementById("authModeLabel").textContent = isRegister ? "Enterprise registration" : isReset ? "Account recovery" : isVerify ? "Registration email verification" : isMfa ? "Multi-factor authentication" : loginLabel;
+        document.querySelector(".button-label").textContent = isMfa ? "Verify OTP" : isVerify ? "Verify Email" : isRegister ? "Create Account" : isReset ? "Send Recovery Email" : "Continue to MFA";
+        document.getElementById("secondaryModeBtn").textContent = isRegister || isMfa || isVerify ? "Back to sign in" : "Don't have an account? Register";
         passwordInput.autocomplete = isRegister ? "new-password" : "current-password";
+        passwordInput.closest(".password-field").classList.toggle("hidden", isMfa || isVerify);
+        document.querySelector("label[for='password']").classList.toggle("hidden", isMfa || isVerify);
+        document.getElementById("passwordHint").classList.toggle("hidden", isMfa || isVerify);
         setStatus("");
+    }
+
+    function roleRedirect(user = {}) {
+        if (user.role === "applicant") return "pages/upload.html";
+        if (user.role === "interviewer") return "pages/interview.html";
+        if (user.role === "company_admin") return "index.html#command-center";
+        return "index.html";
+    }
+
+    function startMfaCountdown(expiresAt) {
+        state.mfaExpiresAt = expiresAt ? new Date(expiresAt) : null;
+        clearInterval(state.countdownTimer);
+        const hint = document.getElementById("mfaHint");
+        state.countdownTimer = setInterval(() => {
+            if (!state.mfaExpiresAt) return;
+            const seconds = Math.max(0, Math.floor((state.mfaExpiresAt - new Date()) / 1000));
+            hint.textContent = seconds ? `Code expires in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "Code expired. Request a new one.";
+            if (!seconds) clearInterval(state.countdownTimer);
+        }, 1000);
     }
 
     async function submitAuth() {
@@ -255,7 +352,7 @@
         }
 
         const passwordError = validatePassword(password, state.mode === "register");
-        if (state.mode !== "reset" && passwordError) {
+        if (state.mode !== "reset" && state.mode !== "mfa" && state.mode !== "verify" && passwordError) {
             setStatus(passwordError, "error");
             setFieldError(passwordInput, document.getElementById("passwordHint"), passwordError);
             passwordInput.focus();
@@ -266,9 +363,13 @@
         try {
             if (state.mode === "register") {
                 setLoading(true, "Creating workspace...");
-                const data = await apiRegister(email, password, organizationInput.value.trim());
-                setStatus(data.verification_token ? "Account created. Verification token issued." : "Account created. You can log in now.", "success");
-                setMode("login");
+                const data = await apiRegisterRole(accountRoleInput.value, email, password, organizationInput.value.trim(), phoneInput.value.trim());
+                if (data.verification_token) {
+                    resetTokenInput.value = data.verification_token;
+                }
+                state.verificationChannel = data.verification_channel || "email";
+                setMode("verify");
+                setStatus("A verification code has been sent to your email.", "success");
                 return;
             }
 
@@ -279,12 +380,56 @@
                 return;
             }
 
+            if (state.mode === "verify") {
+                const verificationCode = resetTokenInput.value.trim();
+                if (!verificationCode) {
+                    setStatus("Missing verification code.", "error");
+                    resetTokenInput.focus();
+                    return;
+                }
+                setLoading(true, "Verifying email...");
+                const data = state.verificationChannel === "sms"
+                    ? await apiVerifyPhone(phoneInput.value.trim(), verificationCode)
+                    : await apiVerifyEmail(email, verificationCode);
+                setStatus(data.message || "Email verified. You can now sign in.", "success");
+                setMode("login");
+                return;
+            }
+
+            if (state.mode === "mfa") {
+                const otp = mfaInput.value.trim();
+                if (!otp) {
+                    setStatus("Missing MFA code.", "error");
+                    mfaInput.focus();
+                    return;
+                }
+                setLoading(true, "Checking code...");
+                const data = await apiVerifyMfa(state.challengeToken, otp);
+                storeAuthTokens(data, rememberInput.checked);
+                setStatus("Login successful. Redirecting...", "success");
+                clearInterval(state.countdownTimer);
+                setTimeout(() => { window.location.href = roleRedirect(data.user); }, 500);
+                return;
+            }
+
             setLoading(true, "Verifying...");
-            const data = await apiLogin(email, password);
-            storeAuthTokens(data, rememberInput.checked);
-            setStatus("Login successful. Redirecting...", "success");
-            setTimeout(() => { window.location.href = "index.html"; }, 500);
+            const data = getLoginAccountType() === "applicant"
+                ? await apiApplicantLogin(email, password)
+                : await apiLogin(email, password);
+            const challengeToken = data.mfa_token || data.challenge?.challenge_token;
+            if (data.mfa_required && challengeToken) {
+                state.challengeToken = challengeToken;
+                mfaInput.value = data.challenge.dev_otp || "";
+                setMode("mfa");
+                startMfaCountdown(data.challenge?.expires_at);
+                setStatus(`MFA code sent to ${data.masked_destination || data.challenge?.masked_phone || data.challenge?.masked_email}.`, "success");
+                return;
+            }
+            throw new Error("MFA challenge was not issued.");
         } catch (err) {
+            if (String(err?.message || "").toLowerCase().includes("account_not_verified")) {
+                setMode("verify");
+            }
             setStatus(friendlyAuthError(err), "error");
         } finally {
             setLoading(false);
@@ -304,25 +449,36 @@
     });
 
     document.getElementById("secondaryModeBtn").addEventListener("click", () => {
-        setMode(state.mode === "register" ? "login" : "register");
+        setMode(state.mode === "register" || state.mode === "mfa" || state.mode === "verify" ? "login" : "register");
     });
 
     document.getElementById("forgotModeBtn").addEventListener("click", () => setMode("reset"));
+    loginAccountTypeInput.addEventListener("change", () => {
+        if (state.mode === "login") setMode("login");
+    });
     emailInput.addEventListener("input", runInlineValidation);
     passwordInput.addEventListener("input", runInlineValidation);
 
     document.getElementById("sendVerificationBtn").addEventListener("click", async () => {
         try {
-            const data = await apiSendVerification(getEmail());
-            setStatus(data.message || "Verification request sent.", "success");
+            const data = await apiSendVerificationCode(getEmail(), phoneInput.value.trim(), state.verificationChannel || "email");
+            if (data.verification_token) resetTokenInput.value = data.verification_token;
+            state.verificationChannel = data.channel || state.verificationChannel || "email";
+            setStatus(data.message || "A verification code has been sent.", "success");
         } catch (err) {
             setStatus(friendlyAuthError(err) || "Unable to send verification.", "error");
         }
     });
 
     document.getElementById("verifyEmailBtn").addEventListener("click", async () => {
+        const verificationCode = resetTokenInput.value.trim();
+        if (!verificationCode) {
+            setStatus("Missing verification code.", "error");
+            resetTokenInput.focus();
+            return;
+        }
         try {
-            const data = await apiVerifyEmail(resetTokenInput.value.trim());
+            const data = await apiVerifyEmail(getEmail(), verificationCode);
             setStatus(data.message || "Email verified.", "success");
         } catch (err) {
             setStatus(friendlyAuthError(err) || "Verification failed.", "error");
@@ -341,6 +497,17 @@
             setMode("login");
         } catch (err) {
             setStatus(friendlyAuthError(err) || "Password reset failed.", "error");
+        }
+    });
+
+    document.getElementById("resendMfaBtn").addEventListener("click", async () => {
+        try {
+            const data = await apiResendMfa(state.challengeToken);
+            if (data.dev_otp) mfaInput.value = data.dev_otp;
+            startMfaCountdown(data.expires_at);
+            setStatus(data.message || "A new code has been sent.", "success");
+        } catch (err) {
+            setStatus(friendlyAuthError(err) || "Unable to resend code yet.", "error");
         }
     });
 

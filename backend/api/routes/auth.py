@@ -14,19 +14,29 @@ from backend.services.auth_service import (
     PasswordPolicyError,
     authenticate_user_record,
     build_login_response,
+    create_mfa_challenge,
     get_user_by_email,
+    get_test_mfa_otp,
+    issue_account_verification,
     issue_email_verification,
     issue_password_reset,
+    log_auth_event,
+    mask_phone,
+    mfa_test_mode_enabled,
     microsoft_oauth_config,
     register_user_record,
     reset_password,
+    resend_mfa_challenge,
     revoke_all_sessions,
     revoke_refresh_token,
     rotate_refresh_token,
     serialize_user,
+    set_user_mfa,
     switch_user_workspace,
+    verify_email_code,
+    verify_phone_code,
     validate_password_policy,
-    verify_email_token,
+    verify_mfa_challenge,
 )
 from backend.services.dev_bootstrap_service import bootstrap_user_if_needed
 from backend.services.enterprise_service import create_notification, log_audit_event
@@ -40,14 +50,41 @@ class AuthRequest(BaseModel):
     email: str = Field(..., max_length=320)
     password: str = Field(..., min_length=1, max_length=128)
     organization_name: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=32)
 
 
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., min_length=20, max_length=4000)
 
 
-class TokenRequest(BaseModel):
-    token: str = Field(..., min_length=12, max_length=4000)
+class EmailVerificationRequest(BaseModel):
+    email: str = Field(..., max_length=320)
+    code: str = Field(default="", max_length=4000)
+    verification_code: Optional[str] = Field(default=None, max_length=4000)
+
+
+class PhoneVerificationRequest(BaseModel):
+    phone: str = Field(..., max_length=32)
+    code: str = Field(default="", max_length=4000)
+
+
+class VerificationCodeRequest(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=320)
+    phone: Optional[str] = Field(default=None, max_length=32)
+    channel: str = Field(default="email", pattern="^(email|sms)$")
+
+
+class MfaVerifyRequest(BaseModel):
+    challenge_token: str = Field(..., min_length=20, max_length=4000)
+    otp: str = Field(..., min_length=6, max_length=12)
+
+
+class MfaResendRequest(BaseModel):
+    challenge_token: str = Field(..., min_length=20, max_length=4000)
+
+
+class MfaSetupRequest(BaseModel):
+    enabled: bool = True
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -72,6 +109,15 @@ def _validate_email(email: str) -> str:
     normalized = (email or "").strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
         raise HTTPException(status_code=400, detail="Invalid email")
+    return normalized
+
+
+def _validate_phone(phone: Optional[str]) -> Optional[str]:
+    if not phone:
+        return None
+    normalized = re.sub(r"[\s().-]+", "", phone.strip())
+    if not re.fullmatch(r"\+?[1-9]\d{7,14}", normalized):
+        raise HTTPException(status_code=400, detail="Invalid phone number")
     return normalized
 
 
@@ -106,7 +152,7 @@ def _set_auth_cookies(response: Response, payload: dict) -> None:
         )
     response.set_cookie(
         "csrf_token",
-        "csrf-placeholder",
+        secrets.token_urlsafe(24),
         max_age=60 * 60 * 24 * 14,
         httponly=False,
         secure=_cookie_secure(),
@@ -155,6 +201,7 @@ def _oauth_config(provider: str) -> dict:
 @router.post("/register")
 def register(req: AuthRequest):
     email = _validate_email(req.email)
+    phone = _validate_phone(req.phone)
     try:
         validate_password_policy(req.password)
     except PasswordPolicyError as exc:
@@ -164,6 +211,7 @@ def register(req: AuthRequest):
         email,
         req.password,
         organization_name=req.organization_name,
+        phone=phone,
     )
     if not user:
         raise HTTPException(status_code=400, detail="User already exists")
@@ -174,8 +222,8 @@ def register(req: AuthRequest):
         organization_id=user.organization_id,
         kind="email_verification",
         subject="Verify your AI Recruit account",
-        message="Your workspace is ready. Use the verification token to confirm your email address.",
-        metadata={"verification_token": verification["token"] if verification else None},
+        message="Your workspace is ready. Use the 6-digit verification code sent to your email within 10 minutes.",
+        metadata={"expires_at": verification["expires_at"] if verification else None},
     )
     log_audit_event(
         action="auth.register",
@@ -189,12 +237,64 @@ def register(req: AuthRequest):
     return ok({
         "message": "Registration successful",
         "user": serialize_user(user),
-        "verification_token": verification["token"] if verification else None,
+        "verification_token": verification["token"] if verification and mfa_test_mode_enabled() else None,
+        "verification_expires_at": verification["expires_at"] if verification else None,
+        "verification_channel": verification["channel"] if verification else "email",
     })
 
 
-@router.post("/login")
-def login(req: AuthRequest, request: Request, response: Response):
+def _register_role(req: AuthRequest, role: str):
+    email = _validate_email(req.email)
+    phone = _validate_phone(req.phone)
+    try:
+        validate_password_policy(req.password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    user = register_user_record(
+        email,
+        req.password,
+        organization_name=req.organization_name,
+        role=role,
+        phone=phone,
+    )
+    if not user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    verification = issue_email_verification(email)
+    create_notification(
+        user_id=user.id,
+        organization_id=user.organization_id,
+        kind="email_verification",
+        subject="WorkforceOS Account Verification",
+        message="Your 6-digit verification code expires in 10 minutes. If you did not create this account, ignore this message and contact security.",
+        metadata={"expires_at": verification["expires_at"] if verification else None},
+    )
+    log_auth_event("registration", user=user, details={"role": role})
+    return ok({
+        "message": "Registration successful. Verify your email to activate the account.",
+        "user": serialize_user(user),
+        "verification_token": verification["token"] if verification and mfa_test_mode_enabled() else None,
+        "verification_expires_at": verification["expires_at"] if verification else None,
+        "verification_channel": verification["channel"] if verification else "email",
+    })
+
+
+@router.post("/applicant/register")
+def register_applicant(req: AuthRequest):
+    return _register_role(req, "applicant")
+
+
+@router.post("/recruiter/register")
+def register_recruiter(req: AuthRequest):
+    return _register_role(req, "recruiter")
+
+
+@router.post("/interviewer/register")
+def register_interviewer(req: AuthRequest):
+    return _register_role(req, "interviewer")
+
+
+def _login_with_mfa(req: AuthRequest, request: Request, account_type: Optional[str] = None):
     email = _validate_email(req.email)
     key = _rate_limit_key(email)
     failed_count = _failed_login_attempts.get(key, 0)
@@ -218,6 +318,13 @@ def login(req: AuthRequest, request: Request, response: Response):
                         "locked_until": existing.locked_until.isoformat(),
                         "reason": getattr(existing, "locked_reason", None),
                     },
+                )
+                log_auth_event(
+                    "account_lockout",
+                    user=existing,
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("user-agent"),
+                    details={"reason": getattr(existing, "locked_reason", None)},
                 )
                 raise HTTPException(
                     status_code=403,
@@ -248,25 +355,131 @@ def login(req: AuthRequest, request: Request, response: Response):
                 "attempts": failed_count + 1,
             },
         )
+        log_auth_event(
+            "login_failure",
+            email=email,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            details={"attempts": failed_count + 1},
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    role = getattr(user, "role", "") or ""
+    if account_type == "applicant" and role != "applicant":
+        raise HTTPException(status_code=403, detail="Use Admin / Recruiter Login for this account.")
+    if account_type == "admin_recruiter" and role == "applicant":
+        raise HTTPException(status_code=403, detail="Use Applicant Login for this account.")
+
+    if not (user.email_verified or getattr(user, "phone_verified", False)):
+        log_auth_event(
+            "login_failure",
+            user=user,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            details={"reason": "email_not_verified"},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Your account is not verified yet. Verify your email or phone to continue.",
+                "code": "account_not_verified",
+                "resend_endpoint": "/auth/resend-verification-code",
+                "email": user.username,
+                "phone": mask_phone(getattr(user, "phone", None)),
+            },
+        )
 
     _failed_login_attempts.pop(key, None)
     bootstrap_user_if_needed(user.username)
     user = get_user_by_email(email) or user
-    payload = build_login_response(user)
-    _set_auth_cookies(response, payload)
-    log_audit_event(
-        action="auth.login",
-        entity_type="user",
-        entity_id=str(user.id),
-        organization_id=user.organization_id,
-        user_id=user.id,
-        details={"email": user.username},
+    challenge = create_mfa_challenge(
+        user,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        delivery_channel="sms" if getattr(user, "phone_verified", False) else "email",
     )
     return ok({
-        "message": "Login successful",
-        **payload,
+        "message": "MFA verification required",
+        "mfa_required": True,
+        "mfa_token": challenge.get("challenge_token") if challenge else None,
+        "masked_destination": (challenge or {}).get("masked_phone") or (challenge or {}).get("masked_email"),
+        "challenge": challenge,
+        "user": serialize_user(user),
     })
+
+
+@router.post("/login")
+def login(req: AuthRequest, request: Request, response: Response):
+    return _login_with_mfa(req, request, account_type="admin_recruiter")
+
+
+@router.post("/applicant/login")
+def applicant_login(req: AuthRequest, request: Request, response: Response):
+    return _login_with_mfa(req, request, account_type="applicant")
+
+
+@router.post("/mfa/verify")
+def mfa_verify(req: MfaVerifyRequest, request: Request, response: Response):
+    payload = verify_mfa_challenge(
+        req.challenge_token,
+        req.otp,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA code")
+    _set_auth_cookies(response, payload)
+    log_auth_event(
+        "login_success",
+        email=payload.get("user", {}).get("email"),
+        organization_id=payload.get("user", {}).get("organization_id"),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return ok({"message": "Login successful", **payload})
+
+
+@router.post("/mfa/resend")
+def mfa_resend(req: MfaResendRequest, request: Request):
+    payload = resend_mfa_challenge(
+        req.challenge_token,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    if not payload:
+        raise HTTPException(status_code=400, detail="Invalid or expired MFA challenge")
+    if payload.get("cooldown_seconds"):
+        raise HTTPException(status_code=429, detail={"message": "Please wait before requesting another code.", **payload})
+    return ok(payload)
+
+
+@router.get("/testing/otp/{challenge_token}")
+def testing_mfa_otp(challenge_token: str):
+    if not mfa_test_mode_enabled():
+        raise HTTPException(status_code=404, detail="Test MFA OTP endpoint is disabled")
+    payload = get_test_mfa_otp(challenge_token)
+    if not payload:
+        raise HTTPException(status_code=404, detail="MFA test OTP not found or expired")
+    return ok({
+        "otp": payload["otp"],
+        "expires_at": payload["expires_at"],
+    })
+
+
+@router.post("/mfa/setup")
+def mfa_setup(req: MfaSetupRequest, context: dict = Depends(get_current_user_context)):
+    result = set_user_mfa(context["user"].id, req.enabled)
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+    return ok({"message": "MFA enabled" if req.enabled else "MFA disabled", "user": result})
+
+
+@router.post("/mfa/disable")
+def mfa_disable(context: dict = Depends(get_current_user_context)):
+    result = set_user_mfa(context["user"].id, False)
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+    return ok({"message": "MFA disabled", "user": result})
 
 
 @router.post("/refresh")
@@ -334,7 +547,7 @@ def reset_password_route(req: ResetPasswordRequest):
 @router.post("/send-verification")
 def send_verification(req: ForgotPasswordRequest):
     email = _validate_email(req.email)
-    issued = issue_email_verification(email)
+    issued = issue_account_verification(email=email, channel="email")
     if issued:
         user = get_user_by_email(email)
         if user:
@@ -344,7 +557,7 @@ def send_verification(req: ForgotPasswordRequest):
                 kind="email_verification",
                 subject="Verify your email",
                 message="Use the verification token to confirm your account.",
-                metadata={"verification_token": issued["token"]},
+                metadata={"expires_at": issued["expires_at"]},
             )
     return ok({
         "message": "If the account exists, a verification token has been issued.",
@@ -352,11 +565,121 @@ def send_verification(req: ForgotPasswordRequest):
     })
 
 
+@router.post("/send-verification-code")
+def send_verification_code(req: VerificationCodeRequest):
+    email = _validate_email(req.email) if req.email else None
+    phone = _validate_phone(req.phone) if req.phone else None
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Email or phone is required")
+    issued = issue_account_verification(email=email, phone=phone, channel=req.channel)
+    if not issued:
+        raise HTTPException(status_code=404, detail="Email not found" if email else "Phone not found")
+    return ok({
+        "message": f"A verification code has been sent to your {'phone' if issued['channel'] == 'sms' else 'email'}.",
+        "verification_token": issued["token"] if mfa_test_mode_enabled() else None,
+        "expires_at": issued["expires_at"],
+        "channel": issued["channel"],
+        "masked_destination": issued["masked_destination"],
+    })
+
+
+@router.post("/resend-verification-code")
+def resend_verification_code(req: VerificationCodeRequest):
+    email = _validate_email(req.email) if req.email else None
+    phone = _validate_phone(req.phone) if req.phone else None
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Email or phone is required")
+    issued = issue_account_verification(email=email, phone=phone, channel=req.channel, enforce_cooldown=True)
+    if not issued:
+        raise HTTPException(status_code=404, detail="Email not found" if email else "Phone not found")
+    if issued.get("cooldown_seconds"):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Please wait before requesting another verification code.",
+                "code": "verification_resend_cooldown",
+                "cooldown_seconds": issued["cooldown_seconds"],
+            },
+        )
+    return ok({
+        "message": f"A verification code has been sent to your {'phone' if issued['channel'] == 'sms' else 'email'}.",
+        "verification_token": issued["token"] if mfa_test_mode_enabled() else None,
+        "expires_at": issued["expires_at"],
+        "channel": issued["channel"],
+        "masked_destination": issued["masked_destination"],
+    })
+
+
 @router.post("/verify-email")
-def verify_email(req: TokenRequest):
-    if not verify_email_token(req.token):
-        raise HTTPException(status_code=400, detail="Invalid or expired verification token")
-    return ok({"message": "Email verified successfully"})
+def verify_email(req: EmailVerificationRequest, request: Request):
+    email = _validate_email(req.email)
+    result = verify_email_code(email, req.code or req.verification_code or "")
+    if not result.get("verified"):
+        reason = result.get("reason")
+        message_by_reason = {
+            "missing_code": "Missing verification code",
+            "email_not_found": "Email not found",
+            "expired": "Verification expired",
+            "invalid_code": "Invalid verification code",
+            "too_many_attempts": "Too many attempts. Please request a new code.",
+        }
+        log_auth_event(
+            "email_verification",
+            email=email,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            details={"verification": "failure", "reason": reason},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": message_by_reason.get(reason, "Invalid verification code"),
+                "code": reason or "invalid_code",
+            },
+        )
+    log_auth_event(
+        "email_verification",
+        email=email,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        details={"verification": "success"},
+    )
+    return ok({"message": "Email verified successfully", "user": result.get("user")})
+
+
+@router.post("/verify-phone")
+def verify_phone(req: PhoneVerificationRequest, request: Request):
+    phone = _validate_phone(req.phone)
+    result = verify_phone_code(phone, req.code)
+    if not result.get("verified"):
+        reason = result.get("reason")
+        message_by_reason = {
+            "missing_code": "Missing verification code",
+            "phone_not_found": "Phone not found",
+            "expired": "Verification expired",
+            "invalid_code": "Invalid verification code",
+            "too_many_attempts": "Too many attempts. Please request a new code.",
+        }
+        log_auth_event(
+            "phone_verification",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            details={"verification": "failure", "reason": reason, "phone": mask_phone(phone)},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": message_by_reason.get(reason, "Invalid verification code"),
+                "code": reason or "invalid_code",
+            },
+        )
+    log_auth_event(
+        "phone_verification",
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        details={"verification": "success", "phone": mask_phone(phone)},
+    )
+    return ok({"message": "Phone verified successfully", "user": result.get("user")})
 
 
 @router.get("/microsoft/url")

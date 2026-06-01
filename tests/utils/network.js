@@ -1,4 +1,4 @@
-const API_BASE = process.env.API_BASE || "http://127.0.0.1:8000";
+const API_BASE = process.env.API_BASE || "http://127.0.0.1:8001";
 const mockApi = process.env.E2E_MOCK_API === "1" || process.env.E2E_MOCK_API === "true";
 
 const json = (body) => ({
@@ -11,6 +11,33 @@ async function installEnterpriseApiStabilizers(page) {
   await page.addInitScript((apiBase) => {
     window.API_BASE = apiBase;
     window.__QA_BROWSER_AUDIT__ = true;
+    window.__WORKFORCE_TEST_MODE__ = true;
+    const installStableStyle = () => {
+      const target = document.documentElement || document.head;
+      if (!target) return;
+      if (document.getElementById("qa-stable-style")) return;
+      const style = document.createElement("style");
+      style.id = "qa-stable-style";
+      style.textContent = `*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}`;
+      target.appendChild(style);
+    };
+    installStableStyle();
+    document.addEventListener("DOMContentLoaded", installStableStyle, { once: true });
+    class StableWebSocket {
+      constructor() {
+        this.readyState = 3;
+        setTimeout(() => this.onclose && this.onclose({ code: 1000, reason: "test-mode" }), 0);
+      }
+      send() {}
+      close() { this.readyState = 3; }
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    StableWebSocket.CONNECTING = 0;
+    StableWebSocket.OPEN = 1;
+    StableWebSocket.CLOSING = 2;
+    StableWebSocket.CLOSED = 3;
+    window.WebSocket = StableWebSocket;
   }, API_BASE);
 
   if (!mockApi) return;
@@ -39,6 +66,21 @@ async function installEnterpriseApiStabilizers(page) {
   await page.route(`${API_BASE}/enterprise/ops/**`, (route) => route.fulfill(json({
     recommendations: [{ title: "Review shortlist", severity: "medium" }],
     feed: []
+  })));
+  await page.route(`${API_BASE}/platform/observability`, (route) => route.fulfill(json({
+    queues: {
+      event_bus: { depth: 2, limit: 600, backpressure: { status: "clear", queue_utilization: 0.01 } },
+      background_jobs: { queued_jobs: 0, mode: "test" }
+    },
+    streams: { "stream.ops": { status: "simulated", latency_ms: 0 } },
+    proctor: { active_sessions: 0, stabilization: "test-mode" },
+    events: []
+  })));
+  await page.route(`${API_BASE}/interview/health`, (route) => route.fulfill(json({
+    status: "healthy",
+    service: "interview",
+    vision: { opencv_available: false, guidance: "Test mode" },
+    orchestration: { active_sessions: 0, stabilization: "test-mode" }
   })));
   await page.route(`${API_BASE}/candidates**`, (route) => route.fulfill(json([
     { id: "cand-qa-1", name: "Avery QA", skills: ["Python", "Recruiting"], score: 91 }

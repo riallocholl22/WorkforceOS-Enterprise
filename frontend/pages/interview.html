@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WorkforceOS Interview Intelligence</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
     <link rel="stylesheet" href="../css/styles.css">
     <style>
         .interview-container {
@@ -99,6 +100,7 @@
             border-radius: 8px;
             overflow: hidden;
             margin-bottom: 16px;
+            min-height: 300px;
         }
 
         #interviewVideo {
@@ -118,6 +120,38 @@
             border: 2px dashed var(--line);
             border-radius: 8px;
             color: var(--muted);
+        }
+
+        .face-guide {
+            position: absolute;
+            inset: 13% 23%;
+            border: 1px solid rgba(125, 211, 252, .48);
+            border-radius: 48%;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .18s ease;
+        }
+
+        .video-container.camera-active .face-guide,
+        .video-container.camera-detecting .face-guide,
+        .video-container.face-detected .face-guide,
+        .video-container.low-light .face-guide {
+            opacity: .86;
+        }
+
+        .camera-health-strip {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 9px;
+            border-radius: 8px;
+            background: rgba(2, 6, 23, .70);
+            color: #E5E7EB;
+            font-size: 12px;
         }
 
         .video-controls {
@@ -479,6 +513,11 @@
                             </div>
                         </div>
                         <video id="interviewVideo" autoplay muted playsinline style="display: none;"></video>
+                        <div class="face-guide" aria-hidden="true"></div>
+                        <div class="camera-health-strip">
+                            <span id="cameraHealthText">Camera idle</span>
+                            <span id="cameraConfidenceText">Confidence --</span>
+                        </div>
                     </div>
                     <div class="video-controls">
                         <button id="startCameraBtn" onclick="startCamera()">Start Camera</button>

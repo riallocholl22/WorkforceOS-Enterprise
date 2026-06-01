@@ -1,11 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any, Optional
+from uuid import uuid4
+from datetime import datetime
 from pydantic import BaseModel, Field
 from backend.api.dependencies import get_current_user, get_current_user_context
 from backend.api.rate_limit import ai_rate_limit
 from backend.api.responses import ok
 from backend.services.decision_service import make_decision
 from backend.services.enterprise_service import increment_usage, log_audit_event
+from backend.services.orchestration_service import event_bus, proctor_orchestrator
 from backend.services.proctoring_service import analyze_frame, proctor_health
 from backend.services.workflow_service import evaluate_workflow, persist_workflow_run
 
@@ -17,6 +20,10 @@ except Exception:
 
 router = APIRouter(prefix="/interview", dependencies=[Depends(get_current_user), Depends(ai_rate_limit)])
 INTERVIEW_SESSIONS: Dict[str, Dict[str, Any]] = {}
+INTERVIEW_SESSION_ALIASES: Dict[str, str] = {}
+PROCTOR_MIN_INTERVAL_SECONDS = 4.5
+PROCTOR_EVENT_LIMIT = 120
+INTERVIEW_SESSION_LIMIT = 300
 
 # Pydantic models for request/response
 class GenerateQuestionsRequest(BaseModel):
@@ -249,8 +256,27 @@ def _build_recruiter_report(final_payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _session_payload(session_id: str) -> Dict[str, Any]:
+def _prune_interview_sessions() -> None:
+    if len(INTERVIEW_SESSIONS) <= INTERVIEW_SESSION_LIMIT:
+        return
+    protected = set(INTERVIEW_SESSION_ALIASES.values())
+    ordered = sorted(
+        INTERVIEW_SESSIONS.items(),
+        key=lambda item: str(item[1].get("updated_at") or item[1].get("created_at") or ""),
+    )
+    for key, _ in ordered[: max(0, len(INTERVIEW_SESSIONS) - INTERVIEW_SESSION_LIMIT)]:
+        if key in protected:
+            continue
+        INTERVIEW_SESSIONS.pop(key, None)
+
+
+def _session_payload(session_id: str, candidate_id: Optional[str] = None) -> Dict[str, Any]:
     session = INTERVIEW_SESSIONS.get(session_id)
+    if not session and session_id in INTERVIEW_SESSION_ALIASES:
+        session = INTERVIEW_SESSIONS.get(INTERVIEW_SESSION_ALIASES[session_id])
+    if not session and candidate_id:
+        latest_id = INTERVIEW_SESSION_ALIASES.get(candidate_id)
+        session = INTERVIEW_SESSIONS.get(latest_id or "")
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found")
     return session
@@ -300,7 +326,7 @@ def _next_question_payload(session: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.post("/start")
 async def start_interview(request: StartInterviewRequest):
-    session_id = f"session_{request.candidate_id}_{len(INTERVIEW_SESSIONS) + 1}"
+    session_id = f"session_{request.candidate_id}_{uuid4().hex[:10]}"
     generate_request = GenerateQuestionsRequest(
         candidate_id=request.candidate_id,
         experience_level=request.experience_level,
@@ -322,7 +348,16 @@ async def start_interview(request: StartInterviewRequest):
         "job_description": request.job_description,
         "proctor_events": [],
         "live_scores": [],
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+        "orchestration": {
+            "mode": "adaptive_frame_queue",
+            "created_at": datetime.utcnow().isoformat(),
+        },
     }
+    INTERVIEW_SESSION_ALIASES[request.candidate_id] = session_id
+    _prune_interview_sessions()
+    event_bus.publish("interview", "session.started", {"session_id": session_id, "candidate_id": request.candidate_id})
     next_payload = _next_question_payload(INTERVIEW_SESSIONS[session_id])
     return ok({
         "session_id": session_id,
@@ -335,7 +370,7 @@ async def start_interview(request: StartInterviewRequest):
 
 @router.post("/answer")
 async def answer_interview(request: AnswerInterviewRequest):
-    session = _session_payload(request.session_id)
+    session = _session_payload(request.session_id, request.candidate_id)
     if session.get("candidate_id") != request.candidate_id:
         raise HTTPException(status_code=400, detail="Candidate does not match interview session")
 
@@ -381,6 +416,7 @@ async def answer_interview(request: AnswerInterviewRequest):
         "evaluation": evaluation,
         "live": live,
     })
+    session["updated_at"] = datetime.utcnow().isoformat()
     session.setdefault("live_scores", []).append(live.get("live_score", 0))
 
     follow_up = None
@@ -418,6 +454,7 @@ async def answer_interview(request: AnswerInterviewRequest):
         session["status"] = "completed"
         final_payload = _normalize_final_result(result["data"])
         final_payload["proctor_summary"] = _build_proctor_summary(session)
+        final_payload["recruiter_report"] = _build_recruiter_report(final_payload)
         final_payload["decision_intelligence"] = make_decision(
             match_score=final_payload.get("overall_score", 0) * 10 if final_payload.get("overall_score", 0) <= 10 else final_payload.get("overall_score", 0),
             interview_score=final_payload.get("overall_score", 0) * 10 if final_payload.get("overall_score", 0) <= 10 else final_payload.get("overall_score", 0),
@@ -591,6 +628,10 @@ async def interview_health():
         "service": "interview",
         "openai_available": interview_service.openai_service is not None if interview_service else False,
         "vision": proctor_health(),
+        "orchestration": {
+            **proctor_orchestrator.status(),
+            "event_bus": event_bus.snapshot(limit=10).get("backpressure"),
+        },
         # Camera access is browser-side; this flag signals server readiness for frame analysis.
         "camera_analysis": {
             "client_side": True,
@@ -602,7 +643,8 @@ async def interview_health():
 @router.get("/status/{session_id}")
 async def interview_status(session_id: str):
     """Polling-ready interview session state. Uses candidate/session id until persistent sessions are added."""
-    return ok(INTERVIEW_SESSIONS.get(session_id, {
+    resolved = INTERVIEW_SESSION_ALIASES.get(session_id, session_id)
+    return ok(INTERVIEW_SESSIONS.get(resolved, {
         "candidate_id": session_id,
         "status": "not_started",
         "questions": [],
@@ -651,26 +693,48 @@ def _build_proctor_summary(session: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.post("/proctor")
 async def interview_proctor(request: ProctorRequest, context: dict = Depends(get_current_user_context)):
-    session = _session_payload(request.session_id)
+    session = _session_payload(request.session_id, request.candidate_id)
     if session.get("candidate_id") != request.candidate_id:
         raise HTTPException(status_code=400, detail="Candidate does not match interview session")
 
-    increment_usage(context.get("organization_id"), "ai_calls", 1)
-    analysis = analyze_frame(
-        request.image_base64,
+    analysis = proctor_orchestrator.process(
         session_id=request.session_id,
         candidate_id=request.candidate_id,
+        image_base64=request.image_base64,
+        analyzer=analyze_frame,
     )
-    session.setdefault("proctor_events", []).append(analysis)
+    import time
+    now = time.time()
+    if not analysis.get("throttled"):
+        increment_usage(context.get("organization_id"), "ai_calls", 1)
+    session["last_proctor_at"] = now
+    session["last_proctor_result"] = analysis
+    events = session.setdefault("proctor_events", [])
+    if not analysis.get("throttled"):
+        events.append(analysis)
+    if len(events) > PROCTOR_EVENT_LIMIT:
+        del events[:-PROCTOR_EVENT_LIMIT]
     summary = _build_proctor_summary(session)
-    log_audit_event(
-        action="interview.proctor",
-        entity_type="interview_session",
-        entity_id=request.session_id,
-        organization_id=context.get("organization_id"),
-        user_id=context["user"].id,
-        details=analysis,
+    event_bus.publish(
+        "interview.proctor",
+        "frame.throttled" if analysis.get("throttled") else "frame.processed",
+        {
+            "session_id": request.session_id,
+            "candidate_id": request.candidate_id,
+            "alerts": analysis.get("alerts", []),
+            "next_sample_seconds": analysis.get("next_sample_seconds"),
+        },
+        severity="warning" if analysis.get("alerts") else "info",
     )
+    if not analysis.get("throttled"):
+        log_audit_event(
+            action="interview.proctor",
+            entity_type="interview_session",
+            entity_id=request.session_id,
+            organization_id=context.get("organization_id"),
+            user_id=context["user"].id,
+            details=analysis,
+        )
     return ok({
         **analysis,
         "proctor_score": summary.get("proctor_score", analysis.get("integrity_score", 0)),

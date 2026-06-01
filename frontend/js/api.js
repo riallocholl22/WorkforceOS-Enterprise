@@ -24,6 +24,8 @@ const API_ROUTES = {
     DECISION_INTELLIGENCE: `${ENTERPRISE_PREFIX}/decision/intelligence`,
     WORKFLOW_EVALUATE: `${ENTERPRISE_PREFIX}/workflows/evaluate`,
     SKILL_DEMAND: `${ENTERPRISE_PREFIX}/skills/demand`,
+    PRODUCT_INTELLIGENCE: `${ENTERPRISE_PREFIX}/product-intelligence/overview`,
+    PRODUCT_INTELLIGENCE_EVENTS: `${ENTERPRISE_PREFIX}/product-intelligence/events`,
 
     SHORTLIST: "/shortlist",
     SHORTLIST_AUTO: "/shortlist/auto",
@@ -33,6 +35,23 @@ const API_ROUTES = {
 };
 
 const REQUEST_TIMEOUT = 30000;
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+let refreshPromise = null;
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function requestBackoffDelay(attempt, res = null) {
+    const retryAfter = Number(res?.headers?.get("retry-after") || 0);
+    if (retryAfter > 0) {
+        return Math.min(30000, retryAfter * 1000);
+    }
+    const base = Math.min(8000, 450 * (2 ** Math.max(0, attempt - 1)));
+    return Math.round(base + Math.random() * 300);
+}
 
 
 // ======================================================
@@ -201,6 +220,18 @@ function normalizeApiError(detail) {
     if (lower.includes("validation failed") || lower.includes("field required")) {
         return "Please check the required fields and try again.";
     }
+    if (lower.includes("missing verification code") || lower.includes("missing_code")) {
+        return "Missing verification code.";
+    }
+    if (lower.includes("invalid verification code") || lower.includes("invalid_code")) {
+        return "Invalid verification code.";
+    }
+    if (lower.includes("email not found") || lower.includes("email_not_found")) {
+        return "Email not found.";
+    }
+    if (lower.includes("verification expired") || lower.includes("verification_expired") || lower.includes('"code":"expired"')) {
+        return "Verification expired. Request a new code.";
+    }
     if (lower.includes("invalid credentials")) {
         return "Email or password is incorrect.";
     }
@@ -212,6 +243,9 @@ function normalizeApiError(detail) {
     }
     if (lower.includes("insufficient permissions")) {
         return "This action is restricted in your workspace. If this is unexpected, ask a company admin to confirm your role, then refresh your session.";
+    }
+    if (lower.includes("applicant_scope_restricted") || lower.includes("applicant accounts can access")) {
+        return "This workspace is only available to recruiters and administrators.";
     }
     if (lower.includes("confirmation required") || lower.includes("confirmation_required")) {
         return "This response action needs explicit confirmation because it may impact user access. Review the incident response plan, then confirm and re-run the action.";
@@ -228,6 +262,11 @@ async function refreshSession() {
 
     const refreshToken = getRefreshToken();
 
+    if (refreshPromise) {
+        return refreshPromise;
+    }
+
+    refreshPromise = (async () => {
     try {
 
         const res = await fetch(
@@ -264,6 +303,13 @@ async function refreshSession() {
         clearAuth();
         return false;
     }
+    })();
+
+    try {
+        return await refreshPromise;
+    } finally {
+        refreshPromise = null;
+    }
 }
 
 
@@ -276,7 +322,8 @@ async function request(
     method = "GET",
     data = null,
     retrying = false,
-    isFormData = false
+    isFormData = false,
+    attempt = 1
 ) {
 
     if (
@@ -362,6 +409,16 @@ async function request(
             );
         }
 
+        if (
+            !res.ok &&
+            attempt < 3 &&
+            RETRYABLE_STATUSES.has(res.status) &&
+            (IDEMPOTENT_METHODS.has(method) || endpoint.includes("/realtime-score") || endpoint.includes("/proctor"))
+        ) {
+            await sleep(requestBackoffDelay(attempt, res));
+            return request(endpoint, method, data, retrying, isFormData, attempt + 1);
+        }
+
         if (!res.ok) {
 
             throw new Error(
@@ -418,11 +475,18 @@ async function request(
             );
         }
 
-        console.warn(
-            "[API ERROR]",
-            endpoint,
-            err
-        );
+        if (attempt < 3 && (err instanceof TypeError || err.name === "AbortError")) {
+            await sleep(requestBackoffDelay(attempt));
+            return request(endpoint, method, data, retrying, isFormData, attempt + 1);
+        }
+
+        if (!endpoint.includes("/realtime-score") && !endpoint.includes("/proctor")) {
+            console.warn(
+                "[API ERROR]",
+                endpoint,
+                err
+            );
+        }
 
         throw err;
 
@@ -465,6 +529,10 @@ async function apiLogin(email, password) {
     return request("/auth/login", "POST", { email, password });
 }
 
+async function apiApplicantLogin(email, password) {
+    return request("/auth/applicant/login", "POST", { email, password });
+}
+
 async function apiRegister(email, password, organizationName = "") {
     return request(
         "/auth/register",
@@ -477,6 +545,27 @@ async function apiRegister(email, password, organizationName = "") {
     );
 }
 
+async function apiRegisterRole(role, email, password, organizationName = "", phone = "") {
+    return request(
+        `/auth/${role}/register`,
+        "POST",
+        {
+            email,
+            password,
+            organization_name: organizationName || null,
+            phone: phone || null
+        }
+    );
+}
+
+async function apiVerifyMfa(challengeToken, otp) {
+    return request("/auth/mfa/verify", "POST", { challenge_token: challengeToken, otp });
+}
+
+async function apiResendMfa(challengeToken) {
+    return request("/auth/mfa/resend", "POST", { challenge_token: challengeToken });
+}
+
 async function apiForgotPassword(email) {
     return request("/auth/forgot-password", "POST", { email });
 }
@@ -485,8 +574,20 @@ async function apiSendVerification(email) {
     return request("/auth/send-verification", "POST", { email });
 }
 
-async function apiVerifyEmail(token) {
-    return request("/auth/verify-email", "POST", { token });
+async function apiSendVerificationCode(email, phone = "", channel = "email") {
+    return request("/auth/send-verification-code", "POST", { email, phone: phone || null, channel });
+}
+
+async function apiResendVerificationCode(email, phone = "", channel = "email") {
+    return request("/auth/resend-verification-code", "POST", { email, phone: phone || null, channel });
+}
+
+async function apiVerifyEmail(email, verificationCode) {
+    return request("/auth/verify-email", "POST", { email, code: verificationCode });
+}
+
+async function apiVerifyPhone(phone, verificationCode) {
+    return request("/auth/verify-phone", "POST", { phone, code: verificationCode });
 }
 
 async function apiResetPassword(token, newPassword) {
@@ -550,6 +651,16 @@ async function apiGetNotifications() {
 
 async function apiGetAnalyticsOverview() {
     return request(API_ROUTES.ANALYTICS);
+}
+
+async function apiProductIntelligence(days = 30) {
+    const safeDays = Math.max(1, Math.min(180, Number(days) || 30));
+    return request(`${API_ROUTES.PRODUCT_INTELLIGENCE}?days=${encodeURIComponent(String(safeDays))}`);
+}
+
+async function apiProductIntelligenceEvents(limit = 20) {
+    const safeLimit = Math.max(1, Math.min(80, Number(limit) || 20));
+    return request(`${API_ROUTES.PRODUCT_INTELLIGENCE_EVENTS}?limit=${encodeURIComponent(String(safeLimit))}`);
 }
 
 
@@ -890,6 +1001,66 @@ async function apiUploadResume(
         false,
         true
     );
+}
+
+
+// ======================================================
+// APPLICANT PORTAL
+// ======================================================
+
+async function apiApplicantDashboard() {
+    return request("/applicant/dashboard");
+}
+
+async function apiApplicantProfile() {
+    return request("/applicant/profile");
+}
+
+async function apiUpdateApplicantProfile(data) {
+    return request("/applicant/profile", "PUT", data || {});
+}
+
+async function apiApplicantApplications() {
+    return request("/applicant/applications");
+}
+
+async function apiApplicantRecommendations() {
+    return request("/applicant/recommendations");
+}
+
+async function apiApplicantJobs(filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim()) {
+            params.set(key, String(value).trim());
+        }
+    });
+    const query = params.toString();
+    return request(`/applicant/jobs${query ? `?${query}` : ""}`);
+}
+
+async function apiApplicantSaveJob(jobId) {
+    return request("/applicant/jobs/save", "POST", { job_id: Number(jobId) });
+}
+
+async function apiApplicantNotifications() {
+    return request("/applicant/notifications");
+}
+
+async function apiApplicantUpdateNotification(notificationId, status) {
+    return request(`/applicant/notifications/${encodeURIComponent(String(notificationId))}`, "PATCH", { status });
+}
+
+async function apiApplicantDeleteNotification(notificationId) {
+    return request(`/applicant/notifications/${encodeURIComponent(String(notificationId))}`, "DELETE");
+}
+
+async function apiApplicantSecurity() {
+    return request("/applicant/security");
+}
+
+async function apiApplicantMessages() {
+    return request("/applicant/messages");
 }
 
 

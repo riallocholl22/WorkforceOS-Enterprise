@@ -29,6 +29,10 @@ def validate_environment() -> Dict[str, Any]:
         missing.extend(name for name in production_required if not os.getenv(name))
         if os.getenv("DEV_BOOTSTRAP_ENABLED", "").lower() in {"1", "true", "yes", "on"}:
             missing.append("DEV_BOOTSTRAP_ENABLED must be false in production")
+        if os.getenv("E2E_TEST_MODE", "").lower() in {"1", "true", "yes", "on"}:
+            missing.append("E2E_TEST_MODE must be false in production")
+        if os.getenv("AUTH_EXPOSE_TEST_OTPS", "").lower() in {"1", "true", "yes", "on"}:
+            missing.append("AUTH_EXPOSE_TEST_OTPS must be false in production")
     else:
         warnings.extend(name for name in required if not os.getenv(name))
         warnings.extend(name for name in production_required if not os.getenv(name))

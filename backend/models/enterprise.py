@@ -55,9 +55,49 @@ class EmailVerificationToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     token_hash = Column(String, nullable=False, unique=True, index=True)
+    channel = Column(String, default="email", nullable=False, index=True)
+    destination = Column(String, nullable=True, index=True)
     expires_at = Column(DateTime, nullable=False)
     used_at = Column(DateTime, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=5, nullable=False)
+    locked_until = Column(DateTime, nullable=True)
+    last_sent_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MfaChallenge(Base):
+    __tablename__ = "mfa_challenges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    phone = Column(String, nullable=True, index=True)
+    otp_hash = Column(String, nullable=False, index=True)
+    challenge_token_hash = Column(String, nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=5, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    consumed_at = Column(DateTime, nullable=True)
+    ip_address = Column(String, nullable=True, index=True)
+    user_agent = Column(String, nullable=True)
+    last_sent_at = Column(DateTime, default=datetime.utcnow)
+    delivery_channel = Column(String, default="email", nullable=False)
+
+
+class AuthAuditLog(Base):
+    __tablename__ = "auth_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    ip_address = Column(String, nullable=True, index=True)
+    user_agent = Column(String, nullable=True)
+    role = Column(String, nullable=True, index=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    organization_id = Column(Integer, nullable=True, index=True)
+    details = Column(JSON, default=dict)
 
 
 class Notification(Base):

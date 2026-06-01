@@ -13,6 +13,7 @@ from backend.models.enterprise import (
     SecurityIncident,
     SecurityResponseAction,
 )
+from backend.services.orchestration_service import event_bus
 from backend.services.auth_service import get_user_context_from_token
 from backend.services.enterprise_service import list_audit_logs, list_notifications
 
@@ -207,6 +208,20 @@ async def _ws_send(websocket: WebSocket, event: str, **payload) -> None:
     await websocket.send_text(json.dumps({"event": event, **payload}, default=_ws_urlsafe))
 
 
+def _stream_snapshot() -> dict:
+    snapshot = event_bus.snapshot(limit=30)
+    return {
+        "event_bus": {
+            "mode": snapshot.get("mode"),
+            "queue_depth": snapshot.get("queue_depth"),
+            "buffer_limit": snapshot.get("buffer_limit"),
+            "backpressure": snapshot.get("backpressure"),
+            "stale_streams": snapshot.get("stale_streams"),
+        },
+        "recent_events": snapshot.get("events", [])[:10],
+    }
+
+
 def _friendly_security_item(kind: str, row: dict) -> dict:
     """
     Convert security ORM rows into a stable, UI-friendly live feed item.
@@ -219,8 +234,10 @@ def _friendly_security_item(kind: str, row: dict) -> dict:
     body = ""
 
     if kind == "event":
-        title = f"Threat signal: {row.get('event_type') or 'security.event'}"
-        body = (row.get("recommended_action") or "monitor").replace("_", " ")
+        capability = (row.get("capability") or (row.get("details") or {}).get("capability") or {})
+        label = capability.get("name") if isinstance(capability, dict) else None
+        title = f"Threat signal: {label or row.get('event_type') or 'security.event'}"
+        body = row.get("ai_reasoning") or (row.get("details") or {}).get("ai_reasoning") or (row.get("recommended_action") or "monitor").replace("_", " ")
     elif kind == "incident":
         title = row.get("title") or "Security incident"
         body = row.get("summary") or ""
@@ -235,6 +252,8 @@ def _friendly_security_item(kind: str, row: dict) -> dict:
         "body": str(body).strip()[:600],
         "severity": str(severity or "info"),
         "created_at": created_at,
+        "capability": row.get("capability") or (row.get("details") or {}).get("capability"),
+        "confidence": row.get("confidence") or (row.get("details") or {}).get("confidence"),
         "details": row,
     }
 
@@ -269,14 +288,16 @@ async def ops_stream(websocket: WebSocket):
         notifications=notif_snapshot,
         feed=[_friendly_op_summary(item) for item in combined[:30]],
         recommendations=_build_recommendations(audit_snapshot, notif_snapshot),
+        telemetry=_stream_snapshot(),
     )
+    event_bus.publish("stream.ops", "client.connected", {"organization_id": org_id, "user_id": user_id})
 
     last_audit_id = max([int(item.get("id") or 0) for item in audit_snapshot] or [0])
     last_notif_id = max([int(item.get("id") or 0) for item in notif_snapshot] or [0])
     recent_audit = audit_snapshot
     recent_notifs = notif_snapshot
 
-    poll_interval = 1.6
+    poll_interval = 5.0
     last_heartbeat = datetime.utcnow()
     try:
         while True:
@@ -344,6 +365,7 @@ async def ops_stream(websocket: WebSocket):
             if new_audits:
                 last_audit_id = max(last_audit_id, max(int(item.get("id") or 0) for item in new_audits))
                 for item in new_audits[-15:]:
+                    event_bus.publish("ops.audit", item.get("action") or "audit.event", item)
                     await _ws_send(websocket, "ops_event", item=_friendly_op_summary(item), raw=item)
 
             if new_notifs:
@@ -376,7 +398,9 @@ async def ops_stream(websocket: WebSocket):
                         "continuity": "healthy",
                     },
                     coordination=_ops_coordination_heartbeat(recent_audit, recent_notifs),
+                    orchestration=_stream_snapshot(),
                 )
+                event_bus.heartbeat("ops", clients=1)
                 last_heartbeat = datetime.utcnow()
 
     except WebSocketDisconnect:
@@ -435,6 +459,12 @@ async def security_stream(websocket: WebSocket):
                 "detected_threats": r.detected_threats or [],
                 "recommended_action": r.recommended_action,
                 "details": r.details or {},
+                "capability": (r.details or {}).get("capability"),
+                "ai_reasoning": (r.details or {}).get("ai_reasoning"),
+                "confidence": (r.details or {}).get("confidence"),
+                "uncertainty": (r.details or {}).get("uncertainty"),
+                "operational_impact": (r.details or {}).get("operational_impact"),
+                "mitre_attack": (r.details or {}).get("mitre_attack", []),
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in ev_rows
@@ -488,6 +518,7 @@ async def security_stream(websocket: WebSocket):
         combined = sorted(combined, key=lambda item: str(item.get("created_at") or ""), reverse=True)[:50]
 
         await _ws_send(websocket, "snapshot", events=events, incidents=incidents, actions=actions, feed=combined)
+        event_bus.publish("stream.security", "client.connected", {"organization_id": org_id, "user_id": user_id})
 
         last_event_id = max([int(item.get("id") or 0) for item in events] or [0])
         last_action_id = max([int(item.get("id") or 0) for item in actions] or [0])
@@ -501,7 +532,7 @@ async def security_stream(websocket: WebSocket):
     finally:
         db.close()
 
-    poll_interval = 1.4
+    poll_interval = 5.0
     last_heartbeat = datetime.utcnow()
     try:
         while True:
@@ -557,6 +588,12 @@ async def security_stream(websocket: WebSocket):
                         "detected_threats": r.detected_threats or [],
                         "recommended_action": r.recommended_action,
                         "details": r.details or {},
+                        "capability": (r.details or {}).get("capability"),
+                        "ai_reasoning": (r.details or {}).get("ai_reasoning"),
+                        "confidence": (r.details or {}).get("confidence"),
+                        "uncertainty": (r.details or {}).get("uncertainty"),
+                        "operational_impact": (r.details or {}).get("operational_impact"),
+                        "mitre_attack": (r.details or {}).get("mitre_attack", []),
                         "created_at": r.created_at.isoformat() if r.created_at else None,
                     }
                     for r in ev_rows
@@ -610,6 +647,7 @@ async def security_stream(websocket: WebSocket):
                 last_event_id = max(last_event_id, max(int(item.get("id") or 0) for item in new_events))
                 latest_events = [*new_events, *latest_events][:50]
                 for item in new_events[-20:]:
+                    event_bus.publish("security.event", item.get("event_type") or "security.event", item, severity=item.get("threat_level") or "info")
                     await _ws_send(websocket, "security_event", item=item, feed_item=_friendly_security_item("event", item))
 
             if new_actions:
@@ -647,7 +685,9 @@ async def security_stream(websocket: WebSocket):
                         "continuity": "healthy",
                     },
                     coordination=_security_coordination_heartbeat(latest_events, latest_incidents, latest_actions),
+                    orchestration=_stream_snapshot(),
                 )
+                event_bus.heartbeat("security", clients=1)
                 last_heartbeat = datetime.utcnow()
 
     except WebSocketDisconnect:

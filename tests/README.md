@@ -13,11 +13,11 @@ npm run test:visual
 npm run test:frontend:update-snapshots
 ```
 
-The Playwright config starts the FastAPI backend on `127.0.0.1:8000` and the static frontend on `127.0.0.1:5500` unless those servers are already running locally.
+The Playwright config starts the FastAPI backend on `127.0.0.1:8001` and the static frontend on `127.0.0.1:5500` unless those servers are already running locally.
 
 ## Environment
 
-- `API_BASE`: backend origin, defaults to `http://127.0.0.1:8000`
+- `API_BASE`: backend origin, defaults to `http://127.0.0.1:8001`
 - `FRONTEND_URL`: frontend origin, defaults to `http://127.0.0.1:5500`
 - `E2E_EMAIL` and `E2E_PASSWORD`: optional existing QA user
 - `E2E_MOCK_API=true`: deterministic browser-only mode for frontend infrastructure debugging

@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from backend.db.database import SessionLocal
 from backend.models.enterprise import SecurityEvent, SecurityIncident
 from backend.services.security_ai.response_engine import build_threat_response_plan
+from backend.services.security_ai.capabilities import capability_for_event
 
 
 def _now() -> datetime:
@@ -23,6 +24,21 @@ def _fingerprint(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _incident_type(event_type: str) -> str:
+    capability = capability_for_event(event_type)
+    if capability:
+        domain = str(capability.get("domain") or "platform")
+        return {
+            "email_security": "phishing_forensics",
+            "network_security": "network_threat",
+            "endpoint_security": "endpoint_threat",
+            "siem": "siem_investigation",
+            "threat_intel": "threat_intelligence",
+            "ids": "ids_alert",
+            "identity_security": "auth_abuse",
+            "application_security": "web_attack",
+            "behavioral_security": "insider_risk",
+            "incident_response": "response_coordination",
+        }.get(domain, f"{domain}_risk")[:80]
     if event_type.startswith("auth."):
         return "auth_abuse"
     if event_type.startswith("candidate."):
@@ -35,7 +51,8 @@ def _incident_type(event_type: str) -> str:
 
 
 def _title(event_type: str, threat_level: str) -> str:
-    human = event_type.replace(".", " ").replace("_", " ").title()
+    capability = capability_for_event(event_type)
+    human = str(capability.get("name")) if capability else event_type.replace(".", " ").replace("_", " ").title()
     prefix = "Critical" if threat_level == "critical" else "High" if threat_level == "high" else "Security"
     return f"{prefix}: {human}"
 
@@ -78,6 +95,8 @@ def ingest_security_event(security_event: dict[str, Any], organization_id: Optio
             "event_type": event_type,
             "threat_level": threat_level,
             "risk_score": risk_score,
+            "capability": (security_event.get("capability") or {}).get("name") if isinstance(security_event.get("capability"), dict) else None,
+            "ai_reasoning": security_event.get("ai_reasoning") or (security_event.get("details") or {}).get("ai_reasoning"),
         }
 
         if existing:
@@ -205,4 +224,3 @@ def update_incident_status(organization_id: Optional[int], incident_id: int, *, 
         return serialize_incident(row)
     finally:
         db.close()
-

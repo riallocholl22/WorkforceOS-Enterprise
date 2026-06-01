@@ -6,16 +6,40 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="description" content="WorkforceOS enterprise infrastructure for autonomous workforce intelligence and AI-assisted hiring operations.">
     <title>WorkforceOS Command Center</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/enterprise-refinement.css">
 </head>
 <body>
+    <script>
+        window.logout = window.logout || function () {
+            try {
+                localStorage.removeItem("token");
+                localStorage.removeItem("refreshToken");
+                localStorage.removeItem("currentUser");
+                sessionStorage.removeItem("token");
+                sessionStorage.removeItem("refreshToken");
+                sessionStorage.removeItem("currentUser");
+                sessionStorage.setItem("authMessage", "You have been securely logged out.");
+            } finally {
+                window.location.href = "login.html";
+            }
+        };
+    </script>
     <div id="globalLoader" class="global-loader">
         <div class="loader-card">Processing...</div>
     </div>
 
     <div class="app-shell">
+        <div class="global-intelligence-layer" aria-hidden="true">
+            <span class="global-mesh mesh-a"></span>
+            <span class="global-mesh mesh-b"></span>
+            <span class="global-signal signal-a"></span>
+            <span class="global-signal signal-b"></span>
+            <span class="global-signal signal-c"></span>
+        </div>
+
         <aside class="sidebar">
             <div class="brand">
                 <div class="brand-mark">WF</div>
@@ -26,16 +50,18 @@
             </div>
 
             <nav class="nav-list">
-                <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">Command Center</button>
-                <button class="nav-item" data-view="candidates" onclick="switchView('candidates')">Candidates</button>
-                <button class="nav-item" data-view="jobs" onclick="switchView('jobs')">Jobs</button>
-                <button class="nav-item" data-view="upload" onclick="switchView('upload')">Upload Resume</button>
-                <button class="nav-item" data-view="matches" onclick="switchView('matches')">Match Results</button>
-                <button class="nav-item" data-view="brain" onclick="switchView('brain')">AI Decision Brain</button>
-                <button class="nav-item" data-view="shortlist" onclick="switchView('shortlist')">Shortlist</button>
-                <button class="nav-item" data-view="interview" onclick="switchView('interview')">AI Interview</button>
-                <button class="nav-item" data-view="enterprise" onclick="switchView('enterprise')">Operations Fabric</button>
-                <button class="nav-item" data-view="security" onclick="switchView('security')">Security Center</button>
+                <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')"><span class="nav-icon">⌁</span><span class="nav-label">Command Center</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="candidates" onclick="switchView('candidates')"><span class="nav-icon">◎</span><span class="nav-label">Candidates</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="jobs" onclick="switchView('jobs')"><span class="nav-icon">▣</span><span class="nav-label">Jobs</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="upload" onclick="switchView('upload')"><span class="nav-icon">↑</span><span class="nav-label">Upload Resume</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="matches" onclick="switchView('matches')"><span class="nav-icon">◈</span><span class="nav-label">Match Results</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="brain" onclick="switchView('brain')"><span class="nav-icon">AI</span><span class="nav-label">AI Decision Brain</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="productIntelligence" onclick="switchView('productIntelligence')"><span class="nav-icon">PI</span><span class="nav-label">Product Intelligence</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="shortlist" onclick="switchView('shortlist')"><span class="nav-icon">✓</span><span class="nav-label">Shortlist</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="interview" onclick="switchView('interview')"><span class="nav-icon">◐</span><span class="nav-label">AI Interview</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="enterprise" onclick="switchView('enterprise')"><span class="nav-icon">◇</span><span class="nav-label">Operations Fabric</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="observability" onclick="switchView('observability')"><span class="nav-icon">λ</span><span class="nav-label">Observability</span><i class="nav-signal"></i></button>
+                <button class="nav-item" data-view="security" onclick="switchView('security')"><span class="nav-icon">⌬</span><span class="nav-label">Security Center</span><i class="nav-signal"></i></button>
             </nav>
 
             <button class="logout-btn" onclick="logout()">Log out</button>
@@ -48,9 +74,10 @@
                     <h2 id="pageTitle">Command Center</h2>
                 </div>
                 <div class="topbar-actions">
+                    <span id="globalRuntimePill" class="runtime-pill"><i aria-hidden="true"></i>Runtime syncing</span>
                     <span id="workspaceName" class="user-pill">Workspace</span>
                     <span id="workspacePlan" class="user-pill">Plan</span>
-                    <span id="notificationCount" class="user-pill">0 alerts</span>
+                    <button id="notificationCount" class="user-pill notification-pill" onclick="openCommandPalette('notifications')">0 alerts</button>
                     <span id="userEmail" class="user-pill">Loading...</span>
                     <button onclick="refreshCurrentView()">Refresh</button>
                 </div>
@@ -59,6 +86,84 @@
             <section id="alertBox" class="alert hidden"></section>
 
             <section id="dashboardView" class="view active">
+                <section class="ai-home-hero" aria-labelledby="homeHeroTitle">
+                    <div class="hero-ambient hero-grid" aria-hidden="true"></div>
+                    <div class="hero-ambient hero-streams" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span>
+                    </div>
+                    <div class="hero-ambient hero-particles" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+
+                    <div class="ai-hero-content">
+                        <div class="ai-hero-copy">
+                            <p class="eyebrow">Autonomous Enterprise AI Infrastructure</p>
+                            <h1 id="homeHeroTitle">WorkforceOS is a living operating system for workforce intelligence.</h1>
+                            <p>AI agents coordinate hiring velocity, security posture, candidate intelligence, executive readiness, and realtime operational telemetry in one production-grade command layer.</p>
+                            <div class="ai-hero-actions">
+                                <button onclick="loadDemoEnvironment(event)">Activate Demo Runtime</button>
+                                <button class="secondary-btn" onclick="switchView('enterprise')">Open Operations Fabric</button>
+                                <button class="secondary-btn" onclick="switchView('security')">Inspect Security Center</button>
+                            </div>
+                        </div>
+
+                        <div class="ai-hero-visual" aria-label="Realtime AI orchestration visualization">
+                            <div class="orchestration-core">
+                                <span class="core-ring ring-one"></span>
+                                <span class="core-ring ring-two"></span>
+                                <span class="core-ring ring-three"></span>
+                                <strong>AI</strong>
+                            </div>
+                            <div class="orchestration-node node-ranking"><span></span><b>Ranking</b></div>
+                            <div class="orchestration-node node-security"><span></span><b>Security</b></div>
+                            <div class="orchestration-node node-ops"><span></span><b>Ops</b></div>
+                            <div class="orchestration-node node-exec"><span></span><b>Exec</b></div>
+                            <div class="orchestration-wave wave-one"></div>
+                            <div class="orchestration-wave wave-two"></div>
+                        </div>
+                    </div>
+
+                    <div class="ai-hero-metrics" aria-label="Realtime operational metrics">
+                        <article><span>Operational Health</span><strong id="heroHealthMetric">--</strong><small id="heroHealthNarrative">Calibrating runtime</small></article>
+                        <article><span>AI Confidence</span><strong id="heroConfidenceMetric">--</strong><small>Explainability and trust telemetry</small></article>
+                        <article><span>Realtime Sync</span><strong id="heroSyncMetric">Live</strong><small id="heroSyncNarrative">Websocket continuity armed</small></article>
+                        <article><span>Enterprise Readiness</span><strong id="heroReadinessMetric">--</strong><small>Production checks and safeguards</small></article>
+                    </div>
+
+                    <div class="command-bridge" aria-label="Enterprise AI command bridge">
+                        <div class="command-bridge-map">
+                            <div class="bridge-core"><strong>OS</strong><span>global orchestration</span></div>
+                            <span class="bridge-node node-a">Recruiting</span>
+                            <span class="bridge-node node-b">Security</span>
+                            <span class="bridge-node node-c">Observability</span>
+                            <span class="bridge-node node-d">Executive</span>
+                            <span class="bridge-line line-a"></span>
+                            <span class="bridge-line line-b"></span>
+                            <span class="bridge-line line-c"></span>
+                            <span class="bridge-line line-d"></span>
+                        </div>
+                        <div class="command-bridge-panel">
+                            <div>
+                                <span class="footer-kicker">Realtime Global Telemetry</span>
+                                <strong id="commandBridgeHeadline">AI orchestration fabric synchronized</strong>
+                                <p id="commandBridgeNarrative" class="muted">Autonomous agents are correlating hiring velocity, SOC posture, candidate movement, and infrastructure health.</p>
+                            </div>
+                            <div id="commandConfidenceMatrix" class="confidence-matrix">
+                                <span><b>Ranking</b><i style="--level:76%"></i></span>
+                                <span><b>Security</b><i style="--level:82%"></i></span>
+                                <span><b>Ops</b><i style="--level:68%"></i></span>
+                                <span><b>Forecast</b><i style="--level:71%"></i></span>
+                            </div>
+                        </div>
+                        <div id="commandTaskStream" class="command-task-stream" aria-label="Autonomous task stream"></div>
+                    </div>
+
+                    <div class="ai-activity-ticker" aria-label="Live operational activity">
+                        <span class="ticker-live-dot" aria-hidden="true"></span>
+                        <div id="homeActivityTicker">Realtime orchestration initializing across hiring, security, and executive intelligence.</div>
+                    </div>
+                </section>
+
                 <section class="workforce-os-panel">
                     <div class="workforce-os-head">
                         <div>
@@ -126,6 +231,122 @@
                             </div>
                             <div id="workforceOSReadiness" class="infra-stack"></div>
                         </div>
+                    </div>
+                </section>
+
+                <section class="cinematic-showcase" aria-labelledby="showcaseTitle">
+                    <div class="section-heading-row">
+                        <div>
+                            <p class="eyebrow">AI Infrastructure Showcase</p>
+                            <h3 id="showcaseTitle">Operational intelligence in motion</h3>
+                        </div>
+                        <div class="rail-actions">
+                            <button class="secondary-btn" onclick="scrollShowcaseRail('aiShowcaseRail', -1)" aria-label="Scroll showcase left">&larr;</button>
+                            <button class="secondary-btn" onclick="scrollShowcaseRail('aiShowcaseRail', 1)" aria-label="Scroll showcase right">&rarr;</button>
+                        </div>
+                    </div>
+                    <div id="aiShowcaseRail" class="horizontal-rail ai-showcase-rail" tabindex="0" aria-label="Horizontal AI infrastructure showcase">
+                        <article class="showcase-card command">
+                            <div class="showcase-visual visual-command" aria-hidden="true"><span></span><span></span><span></span></div>
+                            <p class="eyebrow">Command Center</p>
+                            <h4>Autonomous orchestration layer</h4>
+                            <p>Specialized agents coordinate candidate ranking, job intake, workflow health, and executive summaries.</p>
+                        </article>
+                        <article class="showcase-card security">
+                            <div class="showcase-visual visual-security" aria-hidden="true"><span></span><span></span><span></span></div>
+                            <p class="eyebrow">Security Fabric</p>
+                            <h4>AI-powered enterprise SOC</h4>
+                            <p>Security telemetry, incident response, MITRE mapping, and realtime containment guidance stay synchronized.</p>
+                        </article>
+                        <article class="showcase-card analytics">
+                            <div class="showcase-visual visual-analytics" aria-hidden="true"><span></span><span></span><span></span></div>
+                            <p class="eyebrow">Predictive Intelligence</p>
+                            <h4>Workforce forecasting engine</h4>
+                            <p>Hiring velocity, delay risk, shortlist quality, and market pressure are translated into boardroom-ready insight.</p>
+                        </article>
+                        <article class="showcase-card mesh">
+                            <div class="showcase-visual visual-mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+                            <p class="eyebrow">Agent Mesh</p>
+                            <h4>Coordinated AI workforce</h4>
+                            <p>Recruiting, interview, security, compliance, scheduling, and analytics agents share operational memory.</p>
+                        </article>
+                        <article class="showcase-card telemetry">
+                            <div class="showcase-visual visual-telemetry" aria-hidden="true"><span></span><span></span><span></span></div>
+                            <p class="eyebrow">Realtime Systems</p>
+                            <h4>Production-grade telemetry</h4>
+                            <p>Authenticated streams, fallback polling, status pulses, and audit-ready state transitions keep the OS alive.</p>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="operational-storyscape" aria-labelledby="storyscapeTitle">
+                    <div class="storyscape-backdrop" aria-hidden="true"></div>
+                    <div class="section-heading-row">
+                        <div>
+                            <p class="eyebrow">Autonomous Operating System</p>
+                            <h3 id="storyscapeTitle">Enterprise AI stories, running left to right</h3>
+                        </div>
+                        <div class="rail-actions">
+                            <button class="secondary-btn" onclick="scrollShowcaseRail('operationalStoryRail', -1)" aria-label="Scroll operating story left">&larr;</button>
+                            <button class="secondary-btn" onclick="scrollShowcaseRail('operationalStoryRail', 1)" aria-label="Scroll operating story right">&rarr;</button>
+                        </div>
+                    </div>
+                    <div id="operationalStoryRail" class="horizontal-rail story-rail" tabindex="0" aria-label="Horizontal autonomous AI operating system story">
+                        <article class="story-card story-hiring">
+                            <div class="story-scene scene-command" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>01</span><strong>Autonomous Hiring Coordination</strong><p>AI agents align role intake, ranking, shortlist review, interviews, and recruiter actions without breaking auditability.</p></div>
+                        </article>
+                        <article class="story-card story-security">
+                            <div class="story-scene scene-security" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>02</span><strong>AI Security Operations</strong><p>Realtime SOC telemetry, MITRE context, confidence, uncertainty, and containment workflows stay connected to workforce activity.</p></div>
+                        </article>
+                        <article class="story-card story-predictive">
+                            <div class="story-scene scene-forecast" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>03</span><strong>Predictive Workforce Intelligence</strong><p>Staffing risk, hiring velocity, market scarcity, and delay probability become executive-ready operating forecasts.</p></div>
+                        </article>
+                        <article class="story-card story-executive">
+                            <div class="story-scene scene-exec" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>04</span><strong>Executive Operational Visibility</strong><p>Boardroom summaries convert complex workflow state into decisions, risks, confidence, and next-best actions.</p></div>
+                        </article>
+                        <article class="story-card story-telemetry">
+                            <div class="story-scene scene-telemetry" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>05</span><strong>Realtime Telemetry Infrastructure</strong><p>Authenticated streams, heartbeat continuity, fallback polling, and audit events make the platform feel continuously alive.</p></div>
+                        </article>
+                        <article class="story-card story-agent">
+                            <div class="story-scene scene-agent" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>06</span><strong>AI Agent Mesh Coordination</strong><p>Specialized agents share operational memory across matching, scheduling, compliance, security, and analytics.</p></div>
+                        </article>
+                        <article class="story-card story-decision">
+                            <div class="story-scene scene-decision" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>07</span><strong>Autonomous Decision Systems</strong><p>Every recommendation carries reasoning, confidence, uncertainty, and a controlled path to human approval.</p></div>
+                        </article>
+                        <article class="story-card story-security-intel">
+                            <div class="story-scene scene-intel" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>08</span><strong>Enterprise Security Intelligence</strong><p>Phishing, SIEM, DNS, endpoint, ransomware, insider risk, and web attack detections converge into one SOC fabric.</p></div>
+                        </article>
+                        <article class="story-card story-forecasting">
+                            <div class="story-scene scene-workforce" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>09</span><strong>Workforce Forecasting Engine</strong><p>Predictive simulations expose shortage risk, offer probability, schedule pressure, and talent-market dynamics.</p></div>
+                        </article>
+                        <article class="story-card story-command-layer">
+                            <div class="story-scene scene-layer" aria-hidden="true"><span></span><span></span><span></span><i></i></div>
+                            <div class="story-overlay"><span>10</span><strong>Operational AI Command Layer</strong><p>WorkforceOS becomes the intelligent runtime that connects people, workflows, AI agents, security, and executive operations.</p></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="executive-intelligence-suite" aria-labelledby="execSuiteTitle">
+                    <div class="section-heading-row">
+                        <div>
+                            <p class="eyebrow">Executive Intelligence</p>
+                            <h3 id="execSuiteTitle">Strategic operating panels</h3>
+                        </div>
+                    </div>
+                    <div id="homeExecutivePanels" class="executive-panel-grid">
+                        <article><span>Workforce Health</span><strong>Calibrating</strong><p class="muted">Waiting for operational telemetry.</p></article>
+                        <article><span>AI Trust</span><strong>Explainable</strong><p class="muted">Confidence, uncertainty, and recommendations remain visible.</p></article>
+                        <article><span>Infrastructure</span><strong>Synced</strong><p class="muted">Realtime streams and fallback continuity are enabled.</p></article>
+                        <article><span>Resilience</span><strong>Ready</strong><p class="muted">Security, governance, and production checks are monitored.</p></article>
                     </div>
                 </section>
 
@@ -301,16 +522,55 @@
                     <div class="panel-header">
                         <div>
                             <h3>AI Match Results</h3>
-                            <p class="muted">Paste a job description or leave blank to use the latest saved job.</p>
+                            <p class="muted">Enterprise matching center with ranked candidates, explainable fit signals, and recruiter actions.</p>
+                        </div>
+                        <div class="match-live-state">
+                            <span class="live-dot"></span>
+                            <strong>Live AI pipeline</strong>
+                            <small>Uploads, ranking, shortlist, and interview signals sync automatically.</small>
                         </div>
                     </div>
                     <div class="match-controls">
                         <textarea id="matchJobDescription" placeholder="Paste job description for matching"></textarea>
-                        <button id="matchRunButton" onclick="runMatch()">Run Match</button>
-                        <button class="secondary-btn" onclick="runDecisionAI()">Recruiter Decision AI</button>
+                        <div class="match-command-row">
+                            <button id="matchRunButton" onclick="runMatch()">Run Match</button>
+                            <button class="secondary-btn" onclick="runDecisionAI()">Recruiter Decision AI</button>
+                            <button class="secondary-btn" onclick="switchView('upload')">Upload Resumes</button>
+                        </div>
+                    </div>
+                    <div class="match-filter-grid">
+                        <input id="matchSearchInput" placeholder="Search candidates, skills, risks, or recommendations" oninput="updateMatchFilters()">
+                        <select id="matchSortSelect" onchange="updateMatchFilters()">
+                            <option value="score">Sort by score</option>
+                            <option value="confidence">Sort by confidence</option>
+                            <option value="experience">Sort by experience</option>
+                            <option value="salary">Sort by salary fit</option>
+                            <option value="readiness">Sort by interview readiness</option>
+                        </select>
+                        <select id="matchSkillFilter" onchange="updateMatchFilters()">
+                            <option value="">All skills</option>
+                        </select>
+                        <select id="matchEducationFilter" onchange="updateMatchFilters()">
+                            <option value="">All education fit</option>
+                            <option value="strong">Strong education fit</option>
+                            <option value="review">Needs education review</option>
+                        </select>
+                        <select id="matchRiskFilter" onchange="updateMatchFilters()">
+                            <option value="">All risk levels</option>
+                            <option value="low">Low risk</option>
+                            <option value="medium">Medium risk</option>
+                            <option value="high">High risk</option>
+                        </select>
+                        <input id="matchLocationFilter" placeholder="Location filter" oninput="updateMatchFilters()">
+                        <select id="matchAvailabilityFilter" onchange="updateMatchFilters()">
+                            <option value="">All availability</option>
+                            <option value="ready">Interview ready</option>
+                            <option value="review">Needs review</option>
+                        </select>
                     </div>
                     <div id="matchStatus" class="upload-status"></div>
                     <div id="decisionPanel" class="decision-panel hidden"></div>
+                    <div id="matchInsights" class="match-insights"></div>
                     <div id="matchResults"></div>
                 </section>
 
@@ -353,6 +613,22 @@
             </section>
 
             <section id="brainView" class="view">
+                <section class="brain-command-hero" aria-label="AI decision intelligence layer">
+                    <div>
+                        <p class="eyebrow">Explainable AI Decision Infrastructure</p>
+                        <h3>Candidate intelligence, risk, readiness, and workforce forecasting in one reasoning plane.</h3>
+                        <p class="muted">The Decision Brain turns match evidence, interview signals, shortlist history, compliance posture, and operational context into defensible recruiter decisions.</p>
+                    </div>
+                    <div class="brain-neural-map" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <div class="brain-signal-grid">
+                        <article><span>Reasoning</span><strong>Traceable</strong></article>
+                        <article><span>Risk</span><strong>Weighted</strong></article>
+                        <article><span>Readiness</span><strong>Live</strong></article>
+                        <article><span>Forecast</span><strong>Adaptive</strong></article>
+                    </div>
+                </section>
                 <section class="panel">
                     <div class="panel-header">
                         <div>
@@ -437,7 +713,18 @@
                     <div class="interview-grid">
                         <div class="interview-video-panel">
                             <h4>Live Video Feed</h4>
-                            <video id="interviewVideo" autoplay muted playsinline></video>
+                            <div class="camera-preview-shell" id="dashboardCameraShell" data-camera-state="idle">
+                                <video id="interviewVideo" autoplay muted playsinline></video>
+                                <div class="camera-placeholder" id="dashboardCameraPlaceholder">
+                                    <strong>Camera idle</strong>
+                                    <span>Start camera to show the live interview preview.</span>
+                                </div>
+                                <div class="face-guide" aria-hidden="true"></div>
+                                <div class="camera-health-strip">
+                                    <span id="cameraHealthText">Camera idle</span>
+                                    <span id="cameraConfidenceText">Confidence --</span>
+                                </div>
+                            </div>
                             <div class="video-controls">
                                 <button id="startVideoBtn" onclick="startInterviewVideo()">Start Camera</button>
                                 <button class="secondary-btn" onclick="verifyInterviewFace()">Verify Face</button>
@@ -510,7 +797,46 @@
                 </section>
             </section>
 
+            <section id="productIntelligenceView" class="view">
+                <section class="product-intelligence-shell" aria-labelledby="productIntelligenceTitle">
+                    <div class="product-live-strip">
+                        <span class="status-pill status-average" id="productIntelligenceStatus">Sync armed</span>
+                        <span>Executive Overview</span>
+                        <span>Hiring Analytics</span>
+                        <span>Candidate Analytics</span>
+                        <span>Recruiter Analytics</span>
+                        <span>AI Analytics</span>
+                        <span>Platform Analytics</span>
+                        <span>Revenue Analytics</span>
+                        <span>Forecasting</span>
+                        <span>Recommendations</span>
+                    </div>
+                    <div id="productIntelligenceRoot" aria-live="polite">
+                        <div class="product-loading">
+                            <div class="skeleton"></div>
+                            <div class="skeleton"></div>
+                            <div class="skeleton"></div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
             <section id="enterpriseView" class="view">
+                <section class="operations-fabric-hero" aria-label="Enterprise operations fabric">
+                    <div>
+                        <p class="eyebrow">Enterprise Workforce Orchestration Layer</p>
+                        <h3>Recruiter coordination, billing intelligence, workflow routing, and AI credits metering.</h3>
+                        <p class="muted">Operations Fabric connects workspace roles, automation rules, interview scheduling, subscriptions, compliance, and recruiter productivity into one scalable operating layer.</p>
+                    </div>
+                    <div id="operationsPipeline" class="operations-pipeline" aria-label="Realtime workflow graph">
+                        <span>Intake</span><i></i><span>Rank</span><i></i><span>Shortlist</span><i></i><span>Schedule</span><i></i><span>Decision</span>
+                    </div>
+                    <div id="operationsFabricMetrics" class="fabric-metric-strip">
+                        <article><span>Workflow routing</span><strong>Autonomous</strong></article>
+                        <article><span>AI credits</span><strong>Metered</strong></article>
+                        <article><span>Recruiter velocity</span><strong>Calibrating</strong></article>
+                    </div>
+                </section>
                 <div class="dashboard-grid">
                     <section class="panel">
                         <div class="panel-header">
@@ -622,12 +948,13 @@
             </section>
 
             <section id="securityView" class="view">
-                <div class="dashboard-grid security-grid">
-                    <section class="panel">
-                        <div class="panel-header">
+                <div class="security-command-shell">
+                    <section class="panel security-copilot-panel" aria-labelledby="securityCopilotTitle">
+                        <div class="security-command-head">
                             <div>
-                                <h3>AI Security Copilot</h3>
-                                <p class="muted">Live incident workflows, containment guidance, and autonomous security recommendations.</p>
+                                <p class="eyebrow">Autonomous Security Operations</p>
+                                <h3 id="securityCopilotTitle">AI Security Copilot</h3>
+                                <p class="muted">Live incident workflows, threat reasoning, containment guidance, and production security telemetry.</p>
                             </div>
                             <div class="security-head-actions">
                                 <span id="securityStreamStatus" class="status-pill status-average">Live: connecting</span>
@@ -636,79 +963,332 @@
                             </div>
                         </div>
 
-                        <div id="securitySummary" class="metric-grid"></div>
-
-                        <div class="form-grid compact-form">
-                            <select id="securityEventType">
-                                <option value="auth.failed">Failed login</option>
-                                <option value="auth.refresh_reuse">Token misuse</option>
-                                <option value="candidate.mass_export">Mass export</option>
-                                <option value="admin.role_change">Privilege escalation</option>
-                                <option value="interview.proctor_alert">Interview manipulation</option>
-                            </select>
-                            <input id="securitySourceIp" placeholder="Source IP">
-                            <button onclick="simulateSecurityEvent(event)">Analyze Event</button>
-                        </div>
-
-                        <div class="security-soc-layout">
-                            <div>
-                                <div class="panel-subhead">
-                                    <h4>Incidents</h4>
-                                    <select id="securityIncidentFilter" onchange="loadSecurityIncidents(event)">
-                                        <option value="">All</option>
-                                        <option value="open">Open</option>
-                                        <option value="contained">Contained</option>
-                                        <option value="resolved">Resolved</option>
-                                    </select>
-                                </div>
-                                <div id="securityIncidents" class="stack-list"></div>
+                        <div class="security-defense-map" aria-label="AI cyber defense visualization">
+                            <div class="threat-globe">
+                                <span class="scan-ring ring-a"></span>
+                                <span class="scan-ring ring-b"></span>
+                                <span class="threat-node threat-high">Auth</span>
+                                <span class="threat-node threat-med">API</span>
+                                <span class="threat-node threat-low">Data</span>
+                                <strong>Shield</strong>
                             </div>
-                            <div>
-                                <div class="panel-subhead">
-                                    <h4>Response & Timeline</h4>
-                                    <button class="secondary-btn" onclick="refreshSelectedSecurityIncident()">Refresh</button>
-                                </div>
-                                <div id="securityIncidentDetail" class="security-incident-detail"></div>
-                                <div id="securityIncidentActions" class="stack-list"></div>
+                            <div class="threat-matrix">
+                                <article><span>Attack surface</span><strong id="attackSurfaceMetric">Monitored</strong><small>Auth, API, candidates, interviews</small></article>
+                                <article><span>MITRE mapping</span><strong id="mitreMetric">Active</strong><small>Credential, exfiltration, privilege</small></article>
+                                <article><span>Containment AI</span><strong id="containmentMetric">Recommendation-first</strong><small>Human-approved response</small></article>
                             </div>
+                            <div id="securityHeatmap" class="security-heatmap" aria-label="Failed login and suspicious activity heatmap"></div>
                         </div>
 
-                        <div class="panel-subhead">
-                            <h4>Recent Signals</h4>
-                            <span class="muted">Latest events detected by the platform.</span>
+                        <div id="securitySummary" class="security-summary-grid"></div>
+
+                        <div class="security-capability-panel" aria-label="SOC capability coverage">
+                            <div class="panel-subhead tight">
+                                <div>
+                                    <h4>SOC Detection Fabric</h4>
+                                    <span class="muted">20 integrated analyst capabilities mapped to AI triage, MITRE ATT&CK, incidents, and realtime telemetry.</span>
+                                </div>
+                            </div>
+                            <div id="securityCapabilities" class="security-capability-grid"></div>
                         </div>
-                        <div id="securityTimeline" class="stack-list"></div>
+
+                        <div class="security-command-grid">
+                            <section class="security-primary-zone" aria-label="Active incidents and threat intelligence">
+                                <div class="security-tier-label">
+                                    <span>Tier 1</span>
+                                    <strong>Active Incident Command</strong>
+                                </div>
+                                <div class="security-soc-layout">
+                                    <div class="security-incidents-zone">
+                                        <div class="panel-subhead">
+                                            <div>
+                                                <h4>Active Incidents</h4>
+                                                <span class="muted">Grouped threats, auth anomalies, and escalation candidates.</span>
+                                            </div>
+                                            <select id="securityIncidentFilter" onchange="loadSecurityIncidents(event)" aria-label="Filter incidents by status">
+                                                <option value="">All</option>
+                                                <option value="open">Open</option>
+                                                <option value="contained">Contained</option>
+                                                <option value="resolved">Resolved</option>
+                                            </select>
+                                        </div>
+                                        <div id="securityIncidents" class="security-incident-list"></div>
+                                    </div>
+                                    <div class="security-response-zone">
+                                        <div class="panel-subhead">
+                                            <div>
+                                                <h4>Threat Intelligence</h4>
+                                                <span class="muted">AI reasoning, containment state, and response coordination.</span>
+                                            </div>
+                                            <button class="secondary-btn" onclick="refreshSelectedSecurityIncident()">Refresh</button>
+                                        </div>
+                                        <div id="securityIncidentDetail" class="security-incident-detail"></div>
+                                        <div id="securityIncidentActions" class="security-action-stack"></div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <aside class="security-live-zone" aria-label="Live security status and realtime event stream">
+                                <div class="security-tier-label">
+                                    <span>Tier 2</span>
+                                    <strong>Live Security Status</strong>
+                                </div>
+                                <div class="security-event-lab">
+                                    <div class="panel-subhead tight">
+                                        <div>
+                                            <h4>Realtime Event Stream</h4>
+                                            <span class="muted">Websocket alerts, token signals, and AI mitigation actions.</span>
+                                        </div>
+                                    </div>
+                                    <div id="securityTimeline" class="security-timeline-stream"></div>
+                                </div>
+                                <div class="security-event-lab">
+                                    <div class="panel-subhead tight">
+                                        <div>
+                                            <h4>Incident Coordination</h4>
+                                            <span class="muted">Live SOC updates and defensive state transitions.</span>
+                                        </div>
+                                    </div>
+                                    <div id="securityLiveFeed" class="security-live-feed"></div>
+                                </div>
+                            </aside>
+                        </div>
                     </section>
 
-                    <section class="panel">
+                    <aside class="panel security-infra-panel" aria-label="Security infrastructure settings">
+                        <div class="security-tier-label">
+                            <span>Tier 3</span>
+                            <strong>Quiet Infrastructure</strong>
+                        </div>
                         <div class="panel-header">
                             <div>
                                 <h3>Control Center</h3>
-                                <p class="muted">Active protections and security posture visibility.</p>
+                                <p class="muted">Auth controls, JWT posture, rate limits, policy state, and runtime protection.</p>
                             </div>
                             <button class="secondary-btn" onclick="loadSecurityControls()">Refresh</button>
                         </div>
-                        <div id="securityControls" class="stack-list"></div>
 
-                        <div class="panel-header" style="margin-top: 18px;">
-                            <div>
-                                <h3>Automation Rules</h3>
-                                <p class="muted">Operational guardrails. Defaults are recommendation-first until enabled.</p>
+                        <div class="security-analysis-card">
+                            <div class="panel-subhead tight">
+                                <div>
+                                    <h4>Analyze Security Event</h4>
+                                    <span class="muted">Inject a controlled signal to test AI triage and incident grouping.</span>
+                                </div>
                             </div>
-                            <button class="secondary-btn" onclick="loadSecurityRules()">Refresh</button>
+                            <div class="form-grid compact-form security-analyze-form">
+                                <select id="securityEventType">
+                                    <option value="auth.failed">Failed login</option>
+                                    <option value="auth.refresh_reuse">Token misuse</option>
+                                    <option value="candidate.mass_export">Mass export</option>
+                                    <option value="admin.role_change">Privilege escalation</option>
+                                    <option value="interview.proctor_alert">Interview manipulation</option>
+                                    <option value="email.phishing">Phishing email</option>
+                                    <option value="network.home_anomaly">Home network anomaly</option>
+                                    <option value="endpoint.windows_event">Windows event log</option>
+                                    <option value="siem.alert">SIEM alert</option>
+                                    <option value="intel.ioc_report">IOC report</option>
+                                    <option value="network.malware_traffic">Malware traffic</option>
+                                    <option value="endpoint.powershell">Suspicious PowerShell</option>
+                                    <option value="dns.suspicious">DNS threat hunt</option>
+                                    <option value="ids.suricata_alert">Suricata IDS alert</option>
+                                    <option value="siem.splunk_detection">Splunk detection</option>
+                                    <option value="edr.wazuh_alert">Wazuh endpoint alert</option>
+                                    <option value="endpoint.ransomware_behavior">Ransomware behavior</option>
+                                    <option value="endpoint.usb_malware">USB malware</option>
+                                    <option value="auth.failed_correlation">Failed login correlation</option>
+                                    <option value="web.attack">Web log attack</option>
+                                    <option value="intel.mitre_mapping">MITRE ATT&CK mapping</option>
+                                    <option value="insider.behavior">Insider behavior</option>
+                                    <option value="endpoint.triage">Endpoint triage</option>
+                                    <option value="ir.playbook">IR playbook</option>
+                                </select>
+                                <input id="securitySourceIp" placeholder="Source IP">
+                                <button onclick="simulateSecurityEvent(event)">Analyze</button>
+                            </div>
                         </div>
-                        <div id="securityAutomationRules" class="stack-list"></div>
 
-                        <div class="panel-header" style="margin-top: 18px;">
-                            <div>
-                                <h3>Live Security Feed</h3>
-                                <p class="muted">Realtime security events, incident updates, and defensive actions.</p>
+                        <div id="securityControls" class="security-control-stack"></div>
+
+                        <div class="security-rule-section">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Security Policies</h3>
+                                    <p class="muted">Recommendation-first automation rules for production guardrails.</p>
+                                </div>
+                                <button class="secondary-btn" onclick="loadSecurityRules()">Refresh</button>
                             </div>
+                            <div id="securityAutomationRules" class="security-rule-stack"></div>
                         </div>
-                        <div id="securityLiveFeed" class="security-live-feed"></div>
-                    </section>
+                    </aside>
                 </div>
             </section>
+
+            <section id="observabilityView" class="view">
+                <section class="observability-shell" aria-labelledby="observabilityTitle">
+                    <div class="observability-hero">
+                        <div>
+                            <p class="eyebrow">Enterprise Observability</p>
+                            <h2 id="observabilityTitle">Realtime infrastructure control plane</h2>
+                            <p class="section-desc">Websocket continuity, API health, AI orchestration, queue pressure, telemetry freshness, and interview vision readiness in one operational dashboard.</p>
+                        </div>
+                        <div class="observability-actions">
+                            <button onclick="loadObservability(true)">Refresh Diagnostics</button>
+                            <button class="secondary-btn" onclick="exportObservabilityReport()">Export Report</button>
+                        </div>
+                    </div>
+
+                    <div id="observabilityGrid" class="observability-grid" aria-live="polite"></div>
+                    <div class="observability-deep-grid">
+                        <article class="observability-panel telemetry-graph-panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Latency and Throughput</h3>
+                                    <p class="muted">Realtime websocket, API, event bus, and AI orchestration timing.</p>
+                                </div>
+                            </div>
+                            <div id="latencyGraph" class="latency-graph" aria-label="Animated latency graph"></div>
+                        </article>
+                        <article class="observability-panel node-map-panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Service Dependency Map</h3>
+                                    <p class="muted">API, database, websocket providers, AI services, security, and interview vision.</p>
+                                </div>
+                            </div>
+                            <div id="serviceNodeMap" class="service-node-map" aria-label="Infrastructure node map"></div>
+                        </article>
+                    </div>
+                    <div class="observability-split">
+                        <article class="observability-panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Live Runtime Timeline</h3>
+                                    <p class="muted">Recent heartbeat, sync, notification, and operational events.</p>
+                                </div>
+                            </div>
+                            <div id="observabilityTimeline" class="observability-timeline"></div>
+                        </article>
+
+                        <article class="observability-panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>AI Orchestration Diagnostics</h3>
+                                    <p class="muted">Agent confidence, readiness, fallbacks, and bottleneck signals.</p>
+                                </div>
+                            </div>
+                            <div id="observabilityDiagnostics" class="diagnostic-stack"></div>
+                        </article>
+                    </div>
+                </section>
+            </section>
+
+            <footer class="enterprise-footer" aria-label="WorkforceOS enterprise runtime status">
+                <div class="footer-particle-field" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                <div class="footer-runtime-grid">
+                    <section class="footer-identity" aria-labelledby="footerBrandTitle">
+                        <span class="footer-brand-mark" aria-hidden="true">WF</span>
+                        <div>
+                            <h2 id="footerBrandTitle">WorkforceOS</h2>
+                            <p>Autonomous Workforce Intelligence Infrastructure</p>
+                            <span>Powered by Autonomous Workforce Intelligence</span>
+                            <small>Realtime enterprise AI orchestration for hiring, security, operations, and executive intelligence.</small>
+                        </div>
+                    </section>
+
+                    <section class="footer-live-status" aria-label="Live operational status">
+                        <div class="footer-status-head">
+                            <span class="footer-kicker">Realtime Runtime</span>
+                            <span class="footer-heartbeat" aria-hidden="true"></span>
+                        </div>
+                        <div class="footer-status-grid" role="list">
+                            <div class="footer-status-item" role="listitem">
+                                <span class="footer-status-dot dot-realtime" aria-hidden="true"></span>
+                                <span>Realtime Systems</span>
+                                <strong id="footerRealtimeState">Operational</strong>
+                            </div>
+                            <div class="footer-status-item" role="listitem">
+                                <span class="footer-status-dot dot-ai" aria-hidden="true"></span>
+                                <span>AI Agents</span>
+                                <strong id="footerAIState">Active</strong>
+                            </div>
+                            <div class="footer-status-item" role="listitem">
+                                <span class="footer-status-dot dot-secure" aria-hidden="true"></span>
+                                <span>Security Layer</span>
+                                <strong id="footerSecurityState">Protected</strong>
+                            </div>
+                            <div class="footer-status-item" role="listitem">
+                                <span class="footer-status-dot dot-sync" aria-hidden="true"></span>
+                                <span>Telemetry</span>
+                                <strong id="footerTelemetryState">Synced</strong>
+                            </div>
+                            <div class="footer-status-item" role="listitem">
+                                <span class="footer-status-dot dot-api" aria-hidden="true"></span>
+                                <span>API Health</span>
+                                <strong id="footerAPIState">Healthy</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="footer-trust" aria-label="Enterprise trust and runtime details">
+                        <span>SOC2 Ready</span>
+                        <span>ISO 27001 Aligned</span>
+                        <span>GDPR Data Controls</span>
+                        <span>AI Explainability Enabled</span>
+                        <span>Production Runtime Active</span>
+                        <span>Enterprise Secure</span>
+                        <strong id="footerBuildVersion">v2.4 Enterprise Build</strong>
+                    </section>
+                </div>
+
+                <div class="footer-capability-grid" aria-label="Platform capabilities and enterprise navigation">
+                    <section>
+                        <h4>Platform</h4>
+                        <a onclick="switchView('dashboard')">Command Center</a>
+                        <a onclick="switchView('matches')">AI Matching</a>
+                        <a onclick="switchView('brain')">Decision Brain</a>
+                        <a onclick="switchView('enterprise')">Operations Fabric</a>
+                    </section>
+                    <section>
+                        <h4>Infrastructure</h4>
+                        <a onclick="switchView('observability')">Observability</a>
+                        <a onclick="switchView('security')">Security Center</a>
+                        <a>Developer APIs</a>
+                        <a>Realtime WebSockets</a>
+                    </section>
+                    <section>
+                        <h4>Enterprise Support</h4>
+                        <a>Priority response</a>
+                        <a>Implementation advisory</a>
+                        <a>Security review</a>
+                        <a>Dedicated success</a>
+                    </section>
+                    <section>
+                        <h4>Regions</h4>
+                        <a>US-East primary</a>
+                        <a>EU-West ready</a>
+                        <a>Africa edge sync</a>
+                        <a>Private cloud capable</a>
+                    </section>
+                </div>
+
+                <div class="footer-infra-strip" aria-label="Infrastructure status">
+                    <span><b>Operational uptime</b><em id="footerUptimeMetric">99.98%</em></span>
+                    <span><b>Websocket health</b><em id="footerWsMetric">dual-stream</em></span>
+                    <span><b>AI orchestration</b><em id="footerOrchestrationMetric">active</em></span>
+                    <span><b>Observability</b><em id="footerObservabilityMetric">synced</em></span>
+                    <span><b>Contact</b><em>enterprise@workforceos.ai</em></span>
+                </div>
+
+                <div class="footer-sync-rail" aria-hidden="true">
+                    <span></span>
+                </div>
+
+                <div class="footer-bottom-row">
+                    <span>&copy; 2026 WorkforceOS Enterprise Systems</span>
+                    <span id="footerRuntimeSummary">Autonomous AI Workforce Infrastructure</span>
+                    <span id="footerBuildTelemetry">Production-grade operational intelligence platform</span>
+                </div>
+            </footer>
         </main>
     </div>
 
@@ -726,7 +1306,7 @@
     <button class="chat-toggle" onclick="toggleChat()" aria-label="Open recruiter copilot">Copilot</button>
     <div id="chatWidget" class="chat-widget hidden">
         <div class="chat-header">
-            <span>WorkforceOS Copilot</span>
+            <span>WorkforceOS Copilot <small id="copilotRuntimeHint">Operational advisor online</small></span>
             <button onclick="toggleChat()">×</button>
         </div>
         <div class="chat-shortcuts">

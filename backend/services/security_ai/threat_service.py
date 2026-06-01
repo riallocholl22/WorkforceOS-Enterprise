@@ -12,6 +12,7 @@ from backend.services.enterprise_service import create_notification, log_audit_e
 from backend.services.security_ai.control_center import security_controls_snapshot
 from backend.services.security_ai.incident_service import list_incidents
 from backend.services.security_ai.automation_rules_service import list_security_rules
+from backend.services.security_ai.capabilities import capability_for_event, capability_matrix, event_options
 
 
 def _level(score: int) -> str:
@@ -34,6 +35,7 @@ def analyze_event(
     details = details or {}
     threats = []
     score = 5
+    capability = capability_for_event(event_type)
 
     if event_type in {"auth.failed", "auth.lockout"}:
         score += 35
@@ -59,6 +61,9 @@ def analyze_event(
     if details.get("bot_score", 0) > 80:
         score += 45
         threats.append("bot_activity")
+    if capability:
+        threats.extend(capability.get("detections") or [])
+        score += _capability_score(event_type, details)
 
     score = max(0, min(100, score))
     level = _level(score)
@@ -78,9 +83,117 @@ def analyze_event(
         "source_ip": source_ip,
         "event_type": event_type,
         "details": details,
+        "capability": _capability_summary(capability),
+        "ai_reasoning": _ai_reasoning(event_type, score, threats, details, capability),
+        "confidence": _confidence(score, details, capability),
+        "uncertainty": _uncertainty(details, capability),
+        "operational_impact": (capability or {}).get("impact") or "Security signal requires monitoring and correlation.",
+        "mitre_attack": (capability or {}).get("mitre", []),
         "organization_id": organization_id,
         "user_id": user_id,
     }
+
+
+def _capability_score(event_type: str, details: dict[str, Any]) -> int:
+    score = 0
+    if event_type == "email.phishing":
+        score += 24
+        score += 18 if details.get("attachment_scan") in {"malicious", "suspicious"} else 0
+        score += 18 if details.get("sender_reputation") in {"poor", "unknown"} else 0
+        score += 12 if details.get("suspicious_domain") else 0
+    elif event_type == "network.home_anomaly":
+        score += 24 + min(24, int(details.get("unknown_device_count") or 0) * 6)
+        score += 18 if details.get("unauthorized_access") else 0
+    elif event_type == "endpoint.windows_event":
+        score += 28
+        score += 24 if details.get("privilege_escalation") or details.get("event_id") in {4670, 4672, 7045} else 0
+    elif event_type == "siem.alert":
+        score += 28 + min(28, int(details.get("alert_count") or 0) * 3)
+        score += 14 if details.get("asset_criticality") == "high" else 0
+    elif event_type == "intel.ioc_report":
+        score += 18 + min(32, int(details.get("ioc_count") or 0) * 2)
+    elif event_type == "network.malware_traffic":
+        score += 52
+        score += 18 if details.get("beacon_interval") or details.get("destination_reputation") == "malicious" else 0
+    elif event_type == "endpoint.powershell":
+        score += 38
+        score += 24 if details.get("encoded_command") or details.get("download_cradle") else 0
+        score += 12 if details.get("execution_policy_bypass") else 0
+    elif event_type == "dns.suspicious":
+        score += 34
+        score += 22 if details.get("beaconing") or float(details.get("query_entropy") or 0) > 7 else 0
+    elif event_type == "ids.suricata_alert":
+        score += 36
+        score += 18 if details.get("signature_category") in {"trojan", "exploit", "malware"} else 0
+    elif event_type == "siem.splunk_detection":
+        score += 32
+        score += 18 if details.get("notable_event") or details.get("risk_object") else 0
+    elif event_type == "edr.wazuh_alert":
+        score += 34
+        score += 16 if details.get("file_integrity") or details.get("process_event") else 0
+    elif event_type == "endpoint.ransomware_behavior":
+        score += 72
+        score += 18 if details.get("shadow_copy_delete") or details.get("lateral_movement") else 0
+    elif event_type == "endpoint.usb_malware":
+        score += 45
+        score += 18 if details.get("new_executable") or details.get("autorun_artifact") else 0
+    elif event_type == "auth.failed_correlation":
+        score += 48
+        score += min(28, int(details.get("multi_source_failures") or 0) * 4)
+        score += 18 if details.get("success_after_failures") else 0
+    elif event_type == "web.attack":
+        score += 42
+        score += 18 if details.get("payload_signature") or details.get("path_probe") else 0
+    elif event_type == "intel.mitre_mapping":
+        score += 22
+    elif event_type == "insider.behavior":
+        score += 46
+        score += 20 if details.get("after_hours_access") or details.get("export_volume", 0) > 50 else 0
+    elif event_type == "endpoint.triage":
+        score += 30 + min(35, int(details.get("host_severity") or 0))
+    elif event_type == "ir.playbook":
+        score += 20
+        score += 20 if details.get("containment_state") in {"blocked", "failed", "pending"} else 0
+    return score
+
+
+def _capability_summary(capability: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not capability:
+        return None
+    return {
+        "id": capability.get("id"),
+        "name": capability.get("name"),
+        "domain": capability.get("domain"),
+        "tier": capability.get("tier"),
+    }
+
+
+def _confidence(score: int, details: dict[str, Any], capability: dict[str, Any] | None) -> int:
+    evidence = len([value for value in (details or {}).values() if value not in (None, "", [], {})])
+    base = min(94, max(42, score + evidence * 4))
+    if capability:
+        base = min(96, base + 5)
+    if evidence <= 1:
+        base = max(35, base - 12)
+    return int(base)
+
+
+def _uncertainty(details: dict[str, Any], capability: dict[str, Any] | None) -> str:
+    evidence = len([value for value in (details or {}).values() if value not in (None, "", [], {})])
+    if not capability:
+        return "Unknown event type; AI reasoning is limited to generic risk signals."
+    if evidence <= 1:
+        return "Limited evidence. Correlate with identity, endpoint, DNS, and SIEM context before containment."
+    if evidence <= 3:
+        return "Moderate evidence. Confidence improves if endpoint and identity telemetry agree."
+    return "Evidence coverage is strong; continue validating business intent before disruptive actions."
+
+
+def _ai_reasoning(event_type: str, score: int, threats: list[str], details: dict[str, Any], capability: dict[str, Any] | None) -> str:
+    label = (capability or {}).get("name") or event_type.replace(".", " ")
+    signal_count = len([value for value in (details or {}).values() if value not in (None, "", [], {})])
+    top = ", ".join(sorted(set(threats))[:4]) or "baseline telemetry"
+    return f"{label} scored {score}/100 from {signal_count} evidence fields. Primary signals: {top}."
 
 
 def record_security_event(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,7 +208,15 @@ def record_security_event(payload: Dict[str, Any]) -> Dict[str, Any]:
             threat_level=payload.get("threat_level", "low"),
             detected_threats=payload.get("detected_threats", []),
             recommended_action=payload.get("recommended_action", "monitor"),
-            details=payload.get("details", {}),
+            details={
+                **(payload.get("details", {}) or {}),
+                "capability": payload.get("capability"),
+                "ai_reasoning": payload.get("ai_reasoning"),
+                "confidence": payload.get("confidence"),
+                "uncertainty": payload.get("uncertainty"),
+                "operational_impact": payload.get("operational_impact"),
+                "mitre_attack": payload.get("mitre_attack", []),
+            },
         )
         db.add(row)
         db.commit()
@@ -193,16 +314,20 @@ def security_overview(organization_id: Optional[int] = None) -> Dict[str, Any]:
         max_risk = max([event.risk_score for event in recent], default=0)
         incidents = list_incidents(organization_id, status=None, limit=25) if organization_id is not None else []
         rules = list_security_rules(organization_id, limit=25) if organization_id is not None else []
+        serialized_events = [serialize_security_event(event) for event in events[:25]]
         return {
             "risk_score": max_risk,
             "threat_level": _level(max_risk),
             "detected_threats": sorted({threat for event in recent for threat in (event.detected_threats or []) if threat != "none"}),
             "recommended_action": "review_security_timeline" if max_risk >= 40 else "monitor",
-            "security_events": [serialize_security_event(event) for event in events[:25]],
+            "security_events": serialized_events,
             "attack_timeline": [serialize_security_event(event) for event in recent[:25]],
             "incidents": incidents,
             "control_center": security_controls_snapshot(),
             "automation_rules": rules,
+            "soc_capabilities": capability_matrix(serialized_events),
+            "security_event_options": event_options(),
+            "ai_security_brief": _security_brief(max_risk, incidents, serialized_events),
             "blocked_attack_summaries": [
                 {"threat_level": level, "count": count}
                 for level, count in threat_counts.items()
@@ -229,5 +354,30 @@ def serialize_security_event(event: SecurityEvent) -> Dict[str, Any]:
         "detected_threats": event.detected_threats or [],
         "recommended_action": event.recommended_action,
         "details": event.details or {},
+        "capability": (event.details or {}).get("capability"),
+        "ai_reasoning": (event.details or {}).get("ai_reasoning"),
+        "confidence": (event.details or {}).get("confidence"),
+        "uncertainty": (event.details or {}).get("uncertainty"),
+        "operational_impact": (event.details or {}).get("operational_impact"),
+        "mitre_attack": (event.details or {}).get("mitre_attack", []),
         "created_at": event.created_at.isoformat() if event.created_at else None,
+    }
+
+
+def _security_brief(max_risk: int, incidents: list[dict[str, Any]], events: list[dict[str, Any]]) -> dict[str, Any]:
+    open_incidents = [item for item in incidents if str(item.get("status") or "").lower() not in {"resolved", "closed"}]
+    high_events = [item for item in events if str(item.get("threat_level") or "").lower() in {"high", "critical"}]
+    if high_events:
+        summary = f"{len(high_events)} high-priority security signals require coordinated review."
+    elif open_incidents:
+        summary = f"{len(open_incidents)} incident workflows are active with no critical escalation pressure."
+    else:
+        summary = "Security operations are synchronized; no active critical response pressure detected."
+    return {
+        "summary": summary,
+        "risk_score": max_risk,
+        "open_incidents": len(open_incidents),
+        "confidence": min(96, max(55, 60 + len(events) * 2 + len(incidents) * 3)),
+        "uncertainty": "Confidence depends on connected endpoint, DNS, SIEM, and identity telemetry coverage.",
+        "executive_recommendation": "Keep response automation recommendation-first unless critical identity or ransomware signals appear.",
     }

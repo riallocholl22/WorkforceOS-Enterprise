@@ -49,7 +49,8 @@ function attachConsoleAudit(page, testInfo) {
   });
 
   page.on("pageerror", (error) => {
-    record("pageerror", error.message, { stack: error.stack });
+    const stack = error.stack ? `\n${String(error.stack).split("\n").slice(1, 4).join("\n")}` : "";
+    record("pageerror", `${error.message}${stack}`, { stack: error.stack });
   });
 
   page.on("request", (request) => {

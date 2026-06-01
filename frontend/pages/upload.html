@@ -1,10 +1,1061 @@
-<section class="enterprise-page">
-    <p class="eyebrow">Resume Intake</p>
-    <h2>Candidate Evidence Upload</h2>
-    <p class="section-desc">Upload resumes to extract skills, detect profile signals, and activate ranking, shortlist, and interview intelligence.</p>
-    <div class="panel">
-        <input type="file" id="resumeFile" accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg">
-        <button onclick="uploadResume()">Process Resume</button>
-        <p id="uploadStatus" class="muted">Upload validation checks type, size, and extraction quality before candidate intelligence is trusted.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Applicant Portal - WorkforceOS</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        :root {
+            --app-bg: #07111f;
+            --app-panel: rgba(15, 23, 42, 0.82);
+            --app-panel-strong: rgba(15, 23, 42, 0.96);
+            --app-line: rgba(148, 163, 184, 0.22);
+            --app-text: #e5edf7;
+            --app-muted: #9fb0c7;
+            --app-blue: #38bdf8;
+            --app-green: #22c55e;
+            --app-amber: #f59e0b;
+            --app-rose: #fb7185;
+            --app-violet: #a78bfa;
+            --app-radius: 8px;
+        }
+
+        * { box-sizing: border-box; }
+        body.applicant-body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--app-text);
+            background:
+                linear-gradient(135deg, rgba(56, 189, 248, 0.14), transparent 34%),
+                linear-gradient(225deg, rgba(34, 197, 94, 0.12), transparent 30%),
+                linear-gradient(180deg, #07111f 0%, #101827 56%, #0b1323 100%);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        .applicant-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 268px minmax(0, 1fr);
+        }
+
+        .applicant-sidebar {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            padding: 22px 16px;
+            border-right: 1px solid var(--app-line);
+            background: rgba(7, 17, 31, 0.78);
+            backdrop-filter: blur(18px);
+            overflow-y: auto;
+        }
+
+        .applicant-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border-radius: var(--app-radius);
+            background: linear-gradient(135deg, var(--app-blue), var(--app-green));
+            color: #07111f;
+            font-weight: 900;
+        }
+
+        .applicant-brand h1 {
+            margin: 0;
+            font-size: 1rem;
+            letter-spacing: 0;
+        }
+
+        .applicant-brand span,
+        .muted {
+            color: var(--app-muted);
+        }
+
+        .applicant-nav {
+            display: grid;
+            gap: 6px;
+        }
+
+        .nav-btn,
+        .small-btn,
+        .primary-btn,
+        .ghost-btn {
+            border: 1px solid var(--app-line);
+            border-radius: var(--app-radius);
+            color: var(--app-text);
+            background: rgba(15, 23, 42, 0.56);
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .nav-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 12px;
+            text-align: left;
+        }
+
+        .nav-btn.active,
+        .nav-btn:hover,
+        .small-btn:hover,
+        .ghost-btn:hover {
+            border-color: rgba(56, 189, 248, 0.55);
+            background: rgba(56, 189, 248, 0.12);
+        }
+
+        .applicant-main {
+            min-width: 0;
+            padding: 22px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .topbar h2 {
+            margin: 0;
+            font-size: clamp(1.5rem, 2.6vw, 2.6rem);
+            letter-spacing: 0;
+        }
+
+        .portal-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 30px;
+            padding: 6px 10px;
+            border: 1px solid var(--app-line);
+            border-radius: 999px;
+            color: var(--app-muted);
+            background: rgba(15, 23, 42, 0.68);
+            font-size: 0.82rem;
+        }
+
+        .pill.good { color: #bbf7d0; border-color: rgba(34, 197, 94, 0.45); }
+        .pill.warn { color: #fde68a; border-color: rgba(245, 158, 11, 0.45); }
+        .pill.hot { color: #fecdd3; border-color: rgba(251, 113, 133, 0.45); }
+
+        .hero-panel,
+        .panel,
+        .metric-card,
+        .item-card {
+            border: 1px solid var(--app-line);
+            border-radius: var(--app-radius);
+            background: var(--app-panel);
+            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+        }
+
+        .hero-panel {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+            gap: 18px;
+            padding: 22px;
+            overflow: hidden;
+        }
+
+        .hero-panel h3 {
+            margin: 6px 0 8px;
+            font-size: clamp(1.45rem, 2.2vw, 2.25rem);
+            letter-spacing: 0;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--app-blue);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .hero-actions,
+        .row-actions,
+        .filter-grid,
+        .metric-grid,
+        .content-grid,
+        .two-col {
+            display: grid;
+            gap: 12px;
+        }
+
+        .hero-actions {
+            grid-template-columns: repeat(3, minmax(0, max-content));
+            margin-top: 18px;
+        }
+
+        .primary-btn,
+        .ghost-btn,
+        .small-btn {
+            min-height: 38px;
+            padding: 9px 12px;
+        }
+
+        .primary-btn {
+            border-color: rgba(34, 197, 94, 0.55);
+            color: #052e1a;
+            background: linear-gradient(135deg, #86efac, #38bdf8);
+            font-weight: 800;
+        }
+
+        .ghost-btn.danger {
+            border-color: rgba(251, 113, 133, 0.42);
+            color: #fecdd3;
+        }
+
+        .hero-visual {
+            min-height: 220px;
+            display: grid;
+            align-content: end;
+            gap: 10px;
+            padding: 18px;
+            border-radius: var(--app-radius);
+            background:
+                linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(167, 139, 250, 0.16)),
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0 1px, transparent 1px 36px),
+                repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 36px);
+        }
+
+        .signal-line {
+            height: 10px;
+            border-radius: 99px;
+            background: linear-gradient(90deg, var(--app-green), var(--app-blue), var(--app-violet));
+        }
+
+        .metric-grid {
+            grid-template-columns: repeat(4, minmax(150px, 1fr));
+            margin: 18px 0;
+        }
+
+        .metric-card {
+            padding: 15px;
+            min-height: 112px;
+        }
+
+        .metric-card span {
+            display: block;
+            color: var(--app-muted);
+            font-size: 0.82rem;
+        }
+
+        .metric-card strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 1.7rem;
+        }
+
+        .progress {
+            height: 8px;
+            margin-top: 12px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+        }
+
+        .progress i {
+            display: block;
+            height: 100%;
+            width: var(--value, 0%);
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--app-green), var(--app-blue));
+        }
+
+        .content-grid {
+            grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+            align-items: start;
+        }
+
+        .two-col {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .panel {
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .panel-head h3,
+        .item-card h4 {
+            margin: 0;
+            letter-spacing: 0;
+        }
+
+        .item-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .item-card {
+            padding: 14px;
+            background: rgba(15, 23, 42, 0.64);
+        }
+
+        .item-card p {
+            color: var(--app-muted);
+            margin: 7px 0 0;
+            line-height: 1.55;
+        }
+
+        .job-meta,
+        .tag-list,
+        .timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .tag {
+            padding: 5px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--app-line);
+            color: var(--app-muted);
+            background: rgba(15, 23, 42, 0.68);
+            font-size: 0.78rem;
+        }
+
+        .timeline-step {
+            min-width: 92px;
+            padding: 7px 8px;
+            border: 1px solid var(--app-line);
+            border-radius: var(--app-radius);
+            color: var(--app-muted);
+            font-size: 0.76rem;
+        }
+
+        .timeline-step.complete { border-color: rgba(34, 197, 94, 0.42); color: #bbf7d0; }
+        .timeline-step.active { border-color: rgba(56, 189, 248, 0.58); color: #bae6fd; background: rgba(56, 189, 248, 0.12); }
+
+        .filter-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            min-height: 40px;
+            border: 1px solid var(--app-line);
+            border-radius: var(--app-radius);
+            background: rgba(2, 6, 23, 0.56);
+            color: var(--app-text);
+            padding: 9px 11px;
+            font: inherit;
+        }
+
+        textarea { min-height: 96px; resize: vertical; }
+
+        label {
+            display: grid;
+            gap: 6px;
+            color: var(--app-muted);
+            font-size: 0.82rem;
+        }
+
+        .view { display: none; }
+        .view.active { display: block; }
+
+        .notice {
+            display: none;
+            margin-bottom: 14px;
+            padding: 12px;
+            border-radius: var(--app-radius);
+            border: 1px solid var(--app-line);
+            background: rgba(15, 23, 42, 0.74);
+        }
+
+        .notice.visible { display: block; }
+        .notice.success { border-color: rgba(34, 197, 94, 0.45); color: #bbf7d0; }
+        .notice.error { border-color: rgba(251, 113, 133, 0.45); color: #fecdd3; }
+
+        .empty {
+            padding: 16px;
+            border: 1px dashed var(--app-line);
+            border-radius: var(--app-radius);
+            color: var(--app-muted);
+        }
+
+        .skeleton {
+            min-height: 92px;
+            border-radius: var(--app-radius);
+            background: linear-gradient(90deg, rgba(148,163,184,0.10), rgba(148,163,184,0.20), rgba(148,163,184,0.10));
+            background-size: 220% 100%;
+            animation: shimmer 1.4s infinite;
+        }
+
+        @keyframes shimmer {
+            from { background-position: 220% 0; }
+            to { background-position: -220% 0; }
+        }
+
+        @media (max-width: 980px) {
+            .applicant-shell { grid-template-columns: 1fr; }
+            .applicant-sidebar {
+                position: static;
+                height: auto;
+                border-right: 0;
+                border-bottom: 1px solid var(--app-line);
+            }
+            .applicant-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .hero-panel,
+            .content-grid,
+            .two-col { grid-template-columns: 1fr; }
+            .metric-grid,
+            .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 640px) {
+            .applicant-main { padding: 14px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            .portal-status { justify-content: flex-start; }
+            .applicant-nav,
+            .metric-grid,
+            .filter-grid,
+            .hero-actions { grid-template-columns: 1fr; }
+            .timeline-step { width: 100%; }
+        }
+    </style>
+</head>
+<body class="applicant-body">
+    <div class="applicant-shell">
+        <aside class="applicant-sidebar" aria-label="Applicant navigation">
+            <div class="applicant-brand">
+                <div class="brand-mark" aria-hidden="true">AI</div>
+                <div>
+                    <h1>Applicant Portal</h1>
+                    <span>WorkforceOS Career Platform</span>
+                </div>
+            </div>
+            <nav class="applicant-nav">
+                <button class="nav-btn active" data-view="home">Dashboard <span>01</span></button>
+                <button class="nav-btn" data-view="jobs">Jobs <span>02</span></button>
+                <button class="nav-btn" data-view="applications">Applications <span>03</span></button>
+                <button class="nav-btn" data-view="coach">AI Coach <span>04</span></button>
+                <button class="nav-btn" data-view="resume">Resume <span>05</span></button>
+                <button class="nav-btn" data-view="skills">Skills <span>06</span></button>
+                <button class="nav-btn" data-view="interviews">Interviews <span>07</span></button>
+                <button class="nav-btn" data-view="messages">Messages <span>08</span></button>
+                <button class="nav-btn" data-view="profile">Profile <span>09</span></button>
+                <button class="nav-btn" data-view="security">Privacy <span>10</span></button>
+            </nav>
+        </aside>
+
+        <main class="applicant-main">
+            <div class="topbar">
+                <div>
+                    <p class="eyebrow">AI-powered career workspace</p>
+                    <h2 id="pageTitle">Applicant Dashboard</h2>
+                </div>
+                <div class="portal-status">
+                    <span class="pill good" id="authPill">Secure session</span>
+                    <span class="pill" id="coachPill">Coach loading</span>
+                    <button class="ghost-btn" id="logoutBtn" type="button">Logout</button>
+                </div>
+            </div>
+
+            <div class="notice" id="portalNotice" role="status" aria-live="polite"></div>
+
+            <section class="view active" id="homeView">
+                <div class="hero-panel">
+                    <div>
+                        <p class="eyebrow">Career command center</p>
+                        <h3 id="welcomeTitle">Welcome back</h3>
+                        <p class="muted" id="welcomeCopy">Your profile, resume, applications, interviews, and career recommendations are loading.</p>
+                        <div class="hero-actions">
+                            <button class="primary-btn" data-view-link="jobs" type="button">Find Jobs</button>
+                            <button class="ghost-btn" data-view-link="resume" type="button">Upload Resume</button>
+                            <button class="ghost-btn" data-view-link="coach" type="button">Open Coach</button>
+                        </div>
+                    </div>
+                    <div class="hero-visual" aria-label="Career readiness signals">
+                        <span class="pill good">Profile intelligence</span>
+                        <div class="signal-line"></div>
+                        <span class="pill">Resume scoring</span>
+                        <div class="signal-line" style="width: 78%"></div>
+                        <span class="pill warn">Skill gap roadmap</span>
+                    </div>
+                </div>
+                <div class="metric-grid" id="metricGrid"></div>
+                <div class="content-grid">
+                    <div>
+                        <div class="panel">
+                            <div class="panel-head">
+                                <h3>Recommended Jobs</h3>
+                                <button class="small-btn" data-view-link="jobs" type="button">Browse</button>
+                            </div>
+                            <div class="item-list" id="homeRecommendedJobs"><div class="skeleton"></div></div>
+                        </div>
+                        <div class="panel">
+                            <div class="panel-head">
+                                <h3>Application Pipeline</h3>
+                                <button class="small-btn" data-view-link="applications" type="button">Track</button>
+                            </div>
+                            <div class="item-list" id="homeApplications"><div class="skeleton"></div></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="panel">
+                            <div class="panel-head">
+                                <h3>Career Insights</h3>
+                                <span class="pill" id="skillGapPill">Gap loading</span>
+                            </div>
+                            <div class="item-list" id="careerInsights"><div class="skeleton"></div></div>
+                        </div>
+                        <div class="panel">
+                            <div class="panel-head">
+                                <h3>Notifications</h3>
+                                <button class="small-btn" data-view-link="messages" type="button">Messages</button>
+                            </div>
+                            <div class="item-list" id="homeNotifications"><div class="skeleton"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" id="jobsView">
+                <div class="panel">
+                    <div class="panel-head">
+                        <h3>Job Discovery</h3>
+                        <span class="pill" id="jobCount">0 roles</span>
+                    </div>
+                    <div class="filter-grid">
+                        <label>Search<input id="jobSearch" placeholder="Role, company, skill"></label>
+                        <label>Location<input id="jobLocation" placeholder="Remote, city, region"></label>
+                        <label>Work mode<select id="jobMode"><option value="">Any</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">Onsite</option></select></label>
+                        <label>Experience<input id="jobExperience" placeholder="Entry, mid, senior"></label>
+                        <label>Company<input id="jobCompany" placeholder="Company"></label>
+                        <label>Technology<input id="jobStack" placeholder="Python, React, AWS"></label>
+                        <label>Type<input id="jobType" placeholder="Full-time, contract"></label>
+                        <label>Salary<input id="jobSalary" placeholder="Competitive, 100k"></label>
+                    </div>
+                </div>
+                <div class="two-col">
+                    <div class="panel">
+                        <div class="panel-head"><h3>Recommended Jobs</h3><span class="pill good">AI matched</span></div>
+                        <div class="item-list" id="recommendedJobs"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head"><h3>Trending Jobs</h3><span class="pill warn">Market signal</span></div>
+                        <div class="item-list" id="trendingJobs"></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head"><h3>All Jobs</h3><span class="pill" id="compareCount">0 compared</span></div>
+                    <div class="item-list" id="allJobs"></div>
+                </div>
+            </section>
+
+            <section class="view" id="applicationsView">
+                <div class="panel">
+                    <div class="panel-head"><h3>Application Tracking</h3><span class="pill">Enterprise timeline</span></div>
+                    <div class="item-list" id="applicationsList"></div>
+                </div>
+            </section>
+
+            <section class="view" id="coachView">
+                <div class="two-col">
+                    <div class="panel">
+                        <div class="panel-head"><h3>AI Career Coach</h3><span class="pill good" id="coachStatus">Ready</span></div>
+                        <div class="item-list" id="coachRecommendations"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head"><h3>Career Path</h3><span class="pill">Next moves</span></div>
+                        <div class="item-list" id="careerPath"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" id="resumeView">
+                <div class="panel">
+                    <div class="panel-head"><h3>Resume Intelligence</h3><span class="pill" id="resumeScorePill">Score</span></div>
+                    <label>Upload resume<input type="file" id="resumeFile" accept=".pdf,.doc,.docx,.txt,.csv,.png,.jpg,.jpeg"></label>
+                    <div class="row-actions" style="grid-template-columns: repeat(2, max-content); margin-top: 12px;">
+                        <button class="primary-btn" id="uploadBtn" type="button">Upload and Process</button>
+                        <button class="ghost-btn" id="compareResumeBtn" type="button">Compare Versions</button>
+                    </div>
+                    <p class="muted" id="uploadStatus">Upload validation checks type, size, and extraction quality before profile intelligence is trusted.</p>
+                </div>
+                <div class="two-col">
+                    <div class="panel"><div class="panel-head"><h3>ATS Compatibility</h3><span class="pill good" id="atsPill">Loading</span></div><div id="resumeInsights"></div></div>
+                    <div class="panel"><div class="panel-head"><h3>Resume Versions</h3><span class="pill" id="versionPill">0</span></div><div class="item-list" id="resumeVersions"></div></div>
+                </div>
+            </section>
+
+            <section class="view" id="skillsView">
+                <div class="two-col">
+                    <div class="panel"><div class="panel-head"><h3>Skills Gap Analysis</h3><span class="pill warn" id="gapPill">Gap</span></div><div id="skillsMatrix"></div></div>
+                    <div class="panel"><div class="panel-head"><h3>Learning Priority</h3><span class="pill">Roadmap</span></div><div class="item-list" id="learningList"></div></div>
+                </div>
+            </section>
+
+            <section class="view" id="interviewsView">
+                <div class="panel">
+                    <div class="panel-head"><h3>Interview Center</h3><span class="pill">Preparation and feedback</span></div>
+                    <div class="item-list" id="interviewList"></div>
+                </div>
+            </section>
+
+            <section class="view" id="messagesView">
+                <div class="two-col">
+                    <div class="panel"><div class="panel-head"><h3>Notifications Center</h3><span class="pill">Updates</span></div><div class="item-list" id="notificationList"></div></div>
+                    <div class="panel"><div class="panel-head"><h3>Messaging Center</h3><span class="pill">Secure history</span></div><input id="messageSearch" placeholder="Search conversations"><div class="item-list" id="messageList" style="margin-top: 12px;"></div></div>
+                </div>
+            </section>
+
+            <section class="view" id="profileView">
+                <div class="panel">
+                    <div class="panel-head"><h3>Profile Management</h3><span class="pill" id="profileCompletionPill">0%</span></div>
+                    <form id="profileForm" class="two-col">
+                        <label>Full name<input id="profileName" placeholder="Your name"></label>
+                        <label>Phone<input id="profilePhone" placeholder="+254712345678"></label>
+                        <label>Headline<input id="profileHeadline" placeholder="Software Engineer"></label>
+                        <label>Skills<input id="profileSkills" placeholder="python, fastapi, sql"></label>
+                        <label>Portfolio<input id="profilePortfolio" placeholder="https://portfolio.example"></label>
+                        <label>LinkedIn<input id="profileLinkedIn" placeholder="https://linkedin.com/in/you"></label>
+                        <label>GitHub<input id="profileGithub" placeholder="https://github.com/you"></label>
+                        <label>Languages<input id="profileLanguages" placeholder="English, Swahili"></label>
+                        <label style="grid-column: 1 / -1;">Projects<textarea id="profileProjects" placeholder="Describe key projects, certifications, education, and references."></textarea></label>
+                        <button class="primary-btn" type="submit">Save Profile</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="view" id="securityView">
+                <div class="two-col">
+                    <div class="panel"><div class="panel-head"><h3>Security and Privacy</h3><span class="pill good">Applicant only</span></div><div id="securitySummary"></div></div>
+                    <div class="panel"><div class="panel-head"><h3>Device History</h3><span class="pill">Last 30 days</span></div><div class="item-list" id="deviceHistory"></div></div>
+                </div>
+            </section>
+        </main>
     </div>
-</section>
+
+    <script src="../js/api.js"></script>
+    <script>
+    const portalState = {
+        user: null,
+        dashboard: null,
+        jobs: [],
+        notifications: [],
+        messages: [],
+        comparedJobs: new Set(),
+        savedJobs: new Set(),
+        activeView: "home"
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHTML(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;"
+        }[char]));
+    }
+
+    function setNotice(message = "", type = "neutral") {
+        const el = $("portalNotice");
+        el.textContent = message;
+        el.className = `notice ${message ? "visible" : ""} ${type}`;
+    }
+
+    function setView(view) {
+        portalState.activeView = view;
+        document.querySelectorAll(".view").forEach((node) => node.classList.toggle("active", node.id === `${view}View`));
+        document.querySelectorAll(".nav-btn").forEach((node) => node.classList.toggle("active", node.dataset.view === view));
+        const titles = {
+            home: "Applicant Dashboard",
+            jobs: "Job Discovery",
+            applications: "Application Tracking",
+            coach: "AI Career Coach",
+            resume: "Resume Intelligence",
+            skills: "Skills Gap Analysis",
+            interviews: "Interview Center",
+            messages: "Notifications and Messages",
+            profile: "Profile Management",
+            security: "Security and Privacy"
+        };
+        $("pageTitle").textContent = titles[view] || "Applicant Portal";
+    }
+
+    function pct(value) {
+        return `${Math.max(0, Math.min(100, Number(value) || 0))}%`;
+    }
+
+    function renderMetrics(data) {
+        const profile = data.profile || {};
+        const stats = data.stats || {};
+        const metrics = [
+            ["Profile Strength", profile.completion || 0, "good"],
+            ["Resume Score", profile.resume_score || 0, "good"],
+            ["AI Employability", profile.employability_score || 0, "good"],
+            ["Applications Submitted", stats.applications_submitted || 0, ""],
+            ["Applications Viewed", stats.applications_viewed || 0, ""],
+            ["Shortlisted Jobs", stats.shortlisted_jobs || 0, "warn"],
+            ["Interview Invitations", stats.interview_invitations || 0, "warn"],
+            ["Skill Match Rating", profile.skill_match_rating || 0, "good"]
+        ];
+        $("metricGrid").innerHTML = metrics.map(([label, value, tone]) => `
+            <article class="metric-card">
+                <span>${escapeHTML(label)}</span>
+                <strong>${escapeHTML(value)}${label.includes("Score") || label.includes("Strength") || label.includes("Rating") || label.includes("Employability") ? "%" : ""}</strong>
+                <div class="progress"><i style="--value:${label.includes("Applications") || label.includes("Jobs") || label.includes("Invitations") ? pct(Math.min(100, Number(value) * 20)) : pct(value)}"></i></div>
+                <span class="pill ${tone}" style="margin-top:10px;">${tone === "warn" ? "Needs attention" : "Career signal"}</span>
+            </article>
+        `).join("");
+    }
+
+    function renderJobCard(job) {
+        const compared = portalState.comparedJobs.has(String(job.id));
+        const saved = portalState.savedJobs.has(String(job.id));
+        return `
+            <article class="item-card">
+                <div class="panel-head">
+                    <h4>${escapeHTML(job.title || "Open role")}</h4>
+                    <span class="pill ${job.match_rating >= 70 ? "good" : job.match_rating >= 45 ? "warn" : ""}">${escapeHTML(job.match_rating || 0)}% match</span>
+                </div>
+                <p>${escapeHTML(job.description || "Role details are being prepared by the hiring team.")}</p>
+                <div class="job-meta">
+                    <span class="tag">${escapeHTML(job.company || "Hiring team")}</span>
+                    <span class="tag">${escapeHTML(job.location || "Location flexible")}</span>
+                    <span class="tag">${escapeHTML(job.work_mode || "onsite")}</span>
+                    <span class="tag">${escapeHTML(job.experience_level || "Mid-level")}</span>
+                    <span class="tag">${escapeHTML(job.employment_type || "Full-time")}</span>
+                    <span class="tag">${escapeHTML(job.salary_range || "Competitive")}</span>
+                </div>
+                <div class="tag-list">${(job.technology_stack || []).slice(0, 8).map((skill) => `<span class="tag">${escapeHTML(skill)}</span>`).join("")}</div>
+                <div class="row-actions" style="grid-template-columns: repeat(3, max-content); margin-top: 12px;">
+                    <button class="small-btn" data-save-job="${escapeHTML(job.id)}" type="button">${saved ? "Saved" : "Save Job"}</button>
+                    <button class="small-btn" data-compare-job="${escapeHTML(job.id)}" type="button">${compared ? "Compared" : "Compare"}</button>
+                    <button class="small-btn" data-view-link="applications" type="button">Track Fit</button>
+                </div>
+            </article>
+        `;
+    }
+
+    function renderJobs(data = portalState.dashboard?.jobs || {}) {
+        const all = data.all || portalState.jobs || [];
+        const recommended = data.recommended || all.filter((job) => job.recommended).slice(0, 6);
+        const trending = data.trending || all.filter((job) => job.trending).slice(0, 6);
+        $("jobCount").textContent = `${all.length} roles`;
+        $("compareCount").textContent = `${portalState.comparedJobs.size} compared`;
+        $("recommendedJobs").innerHTML = recommended.length ? recommended.map(renderJobCard).join("") : `<div class="empty">No recommended roles yet. Upload a resume or broaden your filters.</div>`;
+        $("trendingJobs").innerHTML = trending.length ? trending.map(renderJobCard).join("") : `<div class="empty">Trending roles will appear as hiring teams publish openings.</div>`;
+        $("allJobs").innerHTML = all.length ? all.map(renderJobCard).join("") : `<div class="empty">No jobs are available for your workspace yet.</div>`;
+        $("homeRecommendedJobs").innerHTML = recommended.length ? recommended.slice(0, 3).map(renderJobCard).join("") : `<div class="empty">Upload a resume to unlock role recommendations.</div>`;
+    }
+
+    function renderApplications(applications = []) {
+        const html = applications.length ? applications.map((app) => `
+            <article class="item-card">
+                <div class="panel-head"><h4>${escapeHTML(app.role || "Open role")}</h4><span class="pill ${app.status === "Rejected" ? "hot" : app.status?.includes("Interview") ? "warn" : "good"}">${escapeHTML(app.status || "Under Review")}</span></div>
+                <p>${escapeHTML(app.recruiter_update || "Your application is being reviewed.")}</p>
+                <div class="timeline">${(app.timeline || []).map((step) => `<span class="timeline-step ${escapeHTML(step.state)}">${escapeHTML(step.name)}</span>`).join("")}</div>
+                <p class="muted">Last update: ${escapeHTML(app.updated_at || "Pending")}</p>
+            </article>
+        `).join("") : `<div class="empty">No applications yet. Save a job, upload a tailored resume, and start tracking your fit.</div>`;
+        $("applicationsList").innerHTML = html;
+        $("homeApplications").innerHTML = html;
+    }
+
+    function renderCareer(data) {
+        const coach = data.career_coach || {};
+        const recommendations = coach.recommendations || [];
+        $("coachPill").textContent = coach.status === "waiting_for_resume" ? "Resume needed" : "Coach ready";
+        $("coachStatus").textContent = coach.status === "waiting_for_resume" ? "Waiting for resume" : "Ready";
+        const recHtml = recommendations.length ? recommendations.map((item) => `
+            <article class="item-card"><h4>${escapeHTML(item.title)}</h4><p>${escapeHTML(item.reason)}</p><p><strong>${escapeHTML(item.action || "Practice this week.")}</strong></p></article>
+        `).join("") : `<div class="empty">Your coach will generate recommendations after your profile is active.</div>`;
+        $("careerInsights").innerHTML = recHtml;
+        $("coachRecommendations").innerHTML = recHtml;
+        $("careerPath").innerHTML = (coach.career_path || []).map((step, index) => `<article class="item-card"><h4>Step ${index + 1}</h4><p>${escapeHTML(step)}</p></article>`).join("");
+    }
+
+    function renderResume(data) {
+        const resume = data.resume || {};
+        $("resumeScorePill").textContent = `${resume.score || 0}% resume score`;
+        $("atsPill").textContent = `${resume.ats_compatibility || 0}% ATS`;
+        $("versionPill").textContent = `${(resume.versions || []).length} versions`;
+        $("resumeInsights").innerHTML = `
+            <div class="metric-card"><span>ATS Compatibility</span><strong>${escapeHTML(resume.ats_compatibility || 0)}%</strong><div class="progress"><i style="--value:${pct(resume.ats_compatibility)}"></i></div></div>
+            <div class="tag-list">${(resume.missing_keywords || []).map((item) => `<span class="tag">${escapeHTML(item)}</span>`).join("") || `<span class="tag">No missing keywords yet</span>`}</div>
+            <div class="item-list" style="margin-top:12px;">${(resume.suggestions || []).map((item) => `<article class="item-card"><p>${escapeHTML(item)}</p></article>`).join("")}</div>
+        `;
+        $("resumeVersions").innerHTML = (resume.versions || []).length ? resume.versions.map((version) => `
+            <article class="item-card"><h4>${escapeHTML(version.name)}</h4><p>Candidate ID: ${escapeHTML(version.candidate_id)}</p><span class="pill good">${escapeHTML(version.score)}%</span></article>
+        `).join("") : `<div class="empty">Upload a resume to create your first version.</div>`;
+    }
+
+    function renderSkills(data) {
+        const skills = data.skills || {};
+        $("gapPill").textContent = `${skills.gap_percent || 0}% gap`;
+        $("skillGapPill").textContent = `${skills.gap_percent || 0}% skill gap`;
+        $("skillsMatrix").innerHTML = `
+            <h4>Current Skills</h4><div class="tag-list">${(skills.current || []).map((skill) => `<span class="tag">${escapeHTML(skill)}</span>`).join("") || `<span class="tag">Add skills in profile</span>`}</div>
+            <h4 style="margin-top:18px;">Required Skills</h4><div class="tag-list">${(skills.required || []).map((skill) => `<span class="tag">${escapeHTML(skill)}</span>`).join("") || `<span class="tag">No job signals yet</span>`}</div>
+            <div class="progress"><i style="--value:${pct(100 - (skills.gap_percent || 0))}"></i></div>
+        `;
+        $("learningList").innerHTML = (skills.learning_priority || []).map((item) => `
+            <article class="item-card"><h4>${escapeHTML(item.title)}</h4><p>${escapeHTML(item.reason)}</p><p>${escapeHTML(item.action)}</p></article>
+        `).join("") || `<div class="empty">Learning priorities appear after skill extraction.</div>`;
+    }
+
+    function renderInterviews(interviews = []) {
+        $("interviewList").innerHTML = interviews.length ? interviews.map((item) => `
+            <article class="item-card">
+                <div class="panel-head"><h4>${escapeHTML(item.status || "Interview")}</h4><span class="pill warn">${escapeHTML(item.starts_at || "Time pending")}</span></div>
+                <p>Technical ${escapeHTML(item.technical_score)}%, behavioral ${escapeHTML(item.behavioral_score)}%, communication ${escapeHTML(item.communication_score)}%.</p>
+                <div class="row-actions" style="grid-template-columns: repeat(2, max-content); margin-top: 12px;">
+                    <button class="small-btn" data-view-link="coach" type="button">Prepare</button>
+                    <button class="small-btn" data-view-link="skills" type="button">Review Gaps</button>
+                </div>
+            </article>
+        `).join("") : `<div class="empty">No interviews scheduled. Interview preparation tools are ready when an invitation arrives.</div>`;
+    }
+
+    function renderMessages(data) {
+        const notifications = data.notifications || [];
+        const messages = data.messages || [];
+        $("homeNotifications").innerHTML = notifications.length ? notifications.slice(0, 4).map((item) => `<article class="item-card"><h4>${escapeHTML(item.subject)}</h4><p>${escapeHTML(item.message)}</p><span class="pill">${escapeHTML(item.status)}</span></article>`).join("") : `<div class="empty">No new notifications.</div>`;
+        $("notificationList").innerHTML = notifications.length ? notifications.map((item) => `
+            <article class="item-card">
+                <h4>${escapeHTML(item.subject)}</h4><p>${escapeHTML(item.message)}</p>
+                <div class="row-actions" style="grid-template-columns: repeat(3, max-content); margin-top: 12px;">
+                    <button class="small-btn" data-notification-read="${escapeHTML(item.id)}" type="button">Mark Read</button>
+                    <button class="small-btn" data-notification-archive="${escapeHTML(item.id)}" type="button">Archive</button>
+                    <button class="ghost-btn danger" data-notification-delete="${escapeHTML(item.id)}" type="button">Delete</button>
+                </div>
+            </article>
+        `).join("") : `<div class="empty">No application updates yet.</div>`;
+        $("messageList").innerHTML = messages.length ? messages.map((item) => `<article class="item-card"><h4>${escapeHTML(item.subject)}</h4><p>${escapeHTML(item.preview)}</p><span class="tag">${escapeHTML(item.participant || item.from || "Hiring Team")}</span></article>`).join("") : `<div class="empty">Secure conversations will appear here.</div>`;
+    }
+
+    function renderProfile(data) {
+        const candidate = data.profile?.candidate_id ? data.profile : {};
+        const profile = data.profile || {};
+        $("profileCompletionPill").textContent = `${profile.completion || 0}% complete`;
+        $("profileName").value = data.welcome?.name || "";
+        $("profileHeadline").value = data.welcome?.headline || "";
+        $("profileSkills").value = (profile.skills || []).join(", ");
+    }
+
+    function renderSecurity(data) {
+        const security = data.security || {};
+        $("securitySummary").innerHTML = `
+            <article class="item-card"><h4>MFA Settings</h4><p>${security.mfa_enabled ? "Multi-factor authentication is enabled." : "Enable MFA for stronger account protection."}</p></article>
+            <article class="item-card"><h4>Email Verification</h4><p>${security.email_verified ? "Email verified." : "Email verification is pending."}</p></article>
+            <article class="item-card"><h4>Phone Verification</h4><p>${security.phone_verified ? "Phone verified." : "Phone verification is optional but recommended."}</p></article>
+            <article class="item-card"><h4>Privacy Controls</h4><p>Applicant data is restricted to applicant workflows, interview tools, and authorized hiring-team communication.</p></article>
+        `;
+        $("deviceHistory").innerHTML = (security.device_history || []).map((item) => `<article class="item-card"><h4>${escapeHTML(item.event)}</h4><p>${escapeHTML(item.ip_address || "Local session")} - ${escapeHTML(item.created_at || "Recent")}</p></article>`).join("") || `<div class="empty">No recent device history.</div>`;
+    }
+
+    function renderDashboard(data) {
+        portalState.dashboard = data;
+        portalState.jobs = data.jobs?.all || [];
+        $("welcomeTitle").textContent = `Welcome back, ${data.welcome?.name || "Applicant"}`;
+        $("welcomeCopy").textContent = `${data.welcome?.headline || "Applicant"} - your AI coach is tracking readiness, job fit, interviews, and next career moves.`;
+        renderMetrics(data);
+        renderJobs(data.jobs);
+        renderApplications(data.applications || []);
+        renderCareer(data);
+        renderResume(data);
+        renderSkills(data);
+        renderInterviews(data.interviews || []);
+        renderMessages({ notifications: data.notifications || [], messages: data.messages || [] });
+        renderProfile(data);
+        renderSecurity(data);
+    }
+
+    async function loadPortal() {
+        setNotice("");
+        try {
+            const me = await apiGetMe();
+            portalState.user = me;
+            if (me.role !== "applicant") {
+                sessionStorage.setItem("authMessage", "Applicant Portal is available only to applicant accounts.");
+                window.location.href = "../index.html";
+                return;
+            }
+            $("authPill").textContent = `${me.email} - secure`;
+            const [dashboard, messages] = await Promise.all([
+                apiApplicantDashboard(),
+                apiApplicantMessages().catch(() => ({ conversations: [] }))
+            ]);
+            dashboard.messages = messages.conversations || dashboard.messages || [];
+            renderDashboard(dashboard);
+        } catch (err) {
+            setNotice(err.message || "Applicant portal could not load.", "error");
+        }
+    }
+
+    async function refreshJobs() {
+        const filters = {
+            search: $("jobSearch").value,
+            location: $("jobLocation").value,
+            work_mode: $("jobMode").value,
+            experience_level: $("jobExperience").value,
+            company: $("jobCompany").value,
+            technology_stack: $("jobStack").value,
+            employment_type: $("jobType").value,
+            salary: $("jobSalary").value
+        };
+        try {
+            const data = await apiApplicantJobs(filters);
+            portalState.jobs = data.jobs || [];
+            renderJobs({ all: data.jobs || [], recommended: data.recommended || [], trending: data.trending || [] });
+        } catch (err) {
+            setNotice(err.message || "Unable to filter jobs.", "error");
+        }
+    }
+
+    async function uploadApplicantResume() {
+        const file = $("resumeFile").files?.[0];
+        if (!file) {
+            setNotice("Choose a resume file first.", "error");
+            return;
+        }
+        const user = portalState.user || {};
+        const candidateId = portalState.dashboard?.profile?.candidate_id || `applicant-${user.id || Date.now()}`;
+        $("uploadStatus").textContent = "Preparing applicant profile and processing resume...";
+        try {
+            await apiUpdateApplicantProfile({
+                full_name: $("profileName").value || user.email?.split("@")[0] || "Applicant",
+                phone: $("profilePhone").value || null,
+                headline: $("profileHeadline").value || "Applicant",
+                skills: $("profileSkills").value.split(",").map((item) => item.trim()).filter(Boolean)
+            });
+            const result = await apiUploadResume(file, candidateId, "");
+            $("uploadStatus").textContent = `${result.filename} processed with ${(result.skills || []).length} extracted skills.`;
+            setNotice("Resume intelligence updated.", "success");
+            await loadPortal();
+            setView("resume");
+        } catch (err) {
+            $("uploadStatus").textContent = err.message || "Resume upload failed.";
+            setNotice(err.message || "Resume upload failed.", "error");
+        }
+    }
+
+    async function saveProfile(event) {
+        event.preventDefault();
+        try {
+            await apiUpdateApplicantProfile({
+                full_name: $("profileName").value,
+                phone: $("profilePhone").value,
+                headline: $("profileHeadline").value,
+                skills: $("profileSkills").value.split(",").map((item) => item.trim()).filter(Boolean)
+            });
+            setNotice("Profile saved.", "success");
+            await loadPortal();
+            setView("profile");
+        } catch (err) {
+            setNotice(err.message || "Profile save failed.", "error");
+        }
+    }
+
+    function debounce(fn, delay = 280) {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), delay);
+        };
+    }
+
+    document.addEventListener("click", async (event) => {
+        const viewLink = event.target.closest("[data-view-link]");
+        if (viewLink) setView(viewLink.dataset.viewLink);
+
+        const nav = event.target.closest(".nav-btn[data-view]");
+        if (nav) setView(nav.dataset.view);
+
+        const saveJob = event.target.closest("[data-save-job]");
+        if (saveJob) {
+            const id = saveJob.dataset.saveJob;
+            try {
+                await apiApplicantSaveJob(id);
+                portalState.savedJobs.add(String(id));
+                renderJobs();
+                setNotice("Job saved.", "success");
+            } catch (err) {
+                setNotice(err.message || "Unable to save job.", "error");
+            }
+        }
+
+        const compareJob = event.target.closest("[data-compare-job]");
+        if (compareJob) {
+            const id = String(compareJob.dataset.compareJob);
+            if (portalState.comparedJobs.has(id)) portalState.comparedJobs.delete(id);
+            else portalState.comparedJobs.add(id);
+            renderJobs();
+        }
+
+        const read = event.target.closest("[data-notification-read]");
+        const archive = event.target.closest("[data-notification-archive]");
+        const del = event.target.closest("[data-notification-delete]");
+        if (read || archive || del) {
+            const id = (read || archive || del).dataset.notificationRead || (archive || {}).dataset?.notificationArchive || (del || {}).dataset?.notificationDelete;
+            try {
+                if (del) await apiApplicantDeleteNotification(id);
+                else await apiApplicantUpdateNotification(id, read ? "read" : "archived");
+                await loadPortal();
+                setView("messages");
+            } catch (err) {
+                setNotice(err.message || "Notification update failed.", "error");
+            }
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll("#jobSearch,#jobLocation,#jobExperience,#jobCompany,#jobStack,#jobType,#jobSalary").forEach((input) => {
+            input.addEventListener("input", debounce(refreshJobs));
+        });
+        $("jobMode").addEventListener("change", refreshJobs);
+        $("uploadBtn").addEventListener("click", uploadApplicantResume);
+        $("profileForm").addEventListener("submit", saveProfile);
+        $("logoutBtn").addEventListener("click", async () => {
+            try { await apiLogout(); } catch {}
+            window.location.href = "../login.html";
+        });
+        $("messageSearch").addEventListener("input", () => {
+            const query = $("messageSearch").value.toLowerCase();
+            document.querySelectorAll("#messageList .item-card").forEach((card) => {
+                card.style.display = card.textContent.toLowerCase().includes(query) ? "" : "none";
+            });
+        });
+        loadPortal();
+    });
+
+    window.uploadResume = uploadApplicantResume;
+    </script>
+</body>
+</html>

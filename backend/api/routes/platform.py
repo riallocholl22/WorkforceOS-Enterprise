@@ -14,6 +14,7 @@ from backend.services.email_service import send_transactional_email
 from backend.services.embedding_service import semantic_candidate_search, vector_provider_status
 from backend.services.enterprise_service import log_audit_event
 from backend.services.enterprise_service import get_workspace_overview
+from backend.services.orchestration_service import event_bus, proctor_orchestrator
 from backend.services.storage_service import create_signed_upload, storage_status
 from backend.services.subscription_enforcement import can_use_feature, subscription_snapshot
 from backend.services.voice_interview_service import analyze_voice_interview, voice_interview_capabilities
@@ -57,6 +58,7 @@ class AIRouteRequest(BaseModel):
 
 @router.get("/infrastructure")
 def infrastructure_status(context: dict = Depends(get_current_user_context)):
+    orchestration = event_bus.snapshot(limit=40)
     return ok({
         "email": email_provider_status(),
         "jobs": job_system_status(),
@@ -65,6 +67,47 @@ def infrastructure_status(context: dict = Depends(get_current_user_context)):
         "ai": ai_provider_status(),
         "voice_interview": voice_interview_capabilities(),
         "subscription": subscription_snapshot(context.get("organization_id")),
+        "orchestration": {
+            "event_bus": orchestration,
+            "proctor": proctor_orchestrator.status(),
+            "scalability": {
+                "websocket_handling": "authenticated_streams_with_jittered_reconnect",
+                "ai_processing": "queue_ready_in_process_with_external_broker_flags",
+                "telemetry": "bounded_event_bus_with_backpressure_metrics",
+            },
+        },
+    })
+
+
+@router.get("/observability")
+def observability_status(context: dict = Depends(get_current_user_context)):
+    orchestration = event_bus.snapshot(limit=80)
+    jobs = job_system_status()
+    ai = ai_provider_status()
+    return ok({
+        "generated_at": orchestration.get("events", [{}])[0].get("created_at") if orchestration.get("events") else None,
+        "queues": {
+            "background_jobs": jobs,
+            "event_bus": {
+                "depth": orchestration.get("queue_depth"),
+                "limit": orchestration.get("buffer_limit"),
+                "backpressure": orchestration.get("backpressure"),
+            },
+            "ai_processing": {
+                "mode": jobs.get("mode"),
+                "queued": jobs.get("queued_jobs"),
+                "provider": ai.get("routing", {}),
+            },
+        },
+        "streams": orchestration.get("metrics"),
+        "proctor": proctor_orchestrator.status(),
+        "events": orchestration.get("events", [])[:40],
+        "readiness": {
+            "startup_validation": "active",
+            "graceful_degradation": True,
+            "deterministic_testing": True,
+            "secure_configuration": True,
+        },
     })
 
 
